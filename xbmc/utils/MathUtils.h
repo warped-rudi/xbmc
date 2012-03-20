@@ -34,6 +34,7 @@
 
 #if defined(__ppc__) || \
     defined(__powerpc__) || \
+    defined(TARGET_MARVELL_DOVE) || \
    (defined(__APPLE__) && defined(__arm__) && defined(__llvm__)) || \
    (defined(__ANDROID__) && defined(__arm__)) || \
     defined(TARGET_RASPBERRY_PI)
@@ -42,6 +43,7 @@
 
 #if defined(__ppc__) || \
     defined(__powerpc__) || \
+    defined(TARGET_MARVELL_DOVE) || \
    (defined(__APPLE__) && defined(__llvm__)) || \
    (defined(__ANDROID__) && defined(__arm__)) || \
     defined(TARGET_RASPBERRY_PI)
