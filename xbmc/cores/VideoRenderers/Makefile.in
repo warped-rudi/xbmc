@@ -14,8 +14,12 @@ SRCS += OverlayRendererGL.cpp
 endif
 
 ifeq (@USE_OPENGLES@,1)
-SRCS += LinuxRendererGLES.cpp
-SRCS += OverlayRendererGL.cpp
+SRCS+= OverlayRendererGL.cpp
+ifeq (@USE_MARVELL_DOVE@,1)
+SRCS+= DoveOverlayRenderer.cpp
+else
+SRCS+= LinuxRendererGLES.cpp
+endif
 endif
 
 LIB = VideoRenderer.a

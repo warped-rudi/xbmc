@@ -29,6 +29,9 @@
 #include "threads/Thread.h"
 #include "settings/VideoSettings.h"
 #include "OverlayRenderer.h"
+#if defined(HAS_MARVELL_DOVE)
+  #include "DoveOverlayRenderer.h"
+#endif
 
 class CRenderCapture;
 
@@ -112,6 +115,8 @@ public:
 
 #ifdef HAS_GL
   CLinuxRendererGL    *m_pRenderer;
+#elif defined(HAS_MARVELL_DOVE)
+  CDoveOverlayRenderer *m_pRenderer;
 #elif HAS_GLES == 2
   CLinuxRendererGLES  *m_pRenderer;
 #elif defined(HAS_DX)
