@@ -37,6 +37,10 @@
 
 #if defined(_LINUX) && !defined(__APPLE__) && !defined(__ANDROID__)
 #include <X11/Xlib.h>
+#ifndef Status
+/* Status define may be missing on unpatched Marvell Dove systems */
+#define Status int
+#endif
 #include <X11/XKBlib.h>
 #include "input/XBMC_keysym.h"
 #include "utils/log.h"
