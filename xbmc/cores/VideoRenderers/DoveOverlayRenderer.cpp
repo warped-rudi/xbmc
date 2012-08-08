@@ -104,8 +104,14 @@ void CDoveOverlayRenderer::ManageDisplay()
 
   if (m_format == RENDER_FMT_UYVY422)
   {
+    int delta;
     m_overlaySurface.videoMode = DOVEFB_VMODE_YUV422PACKED_SWAPYUorV;
     m_overlaySurface.viewPortInfo.ycPitch = (m_sourceRect.x2 - m_sourceRect.x1) * 2;
+    /* Align ycPitch to 16 pixels (32 bytes) since vmeta outputs in 16byte alignment per stride */
+    /* TODO check of decoded via vmeta or ffmpeg and change accordingly */
+    delta = m_overlaySurface.viewPortInfo.ycPitch % 32;
+    if (delta)
+      m_overlaySurface.viewPortInfo.ycPitch = m_overlaySurface.viewPortInfo.ycPitch - delta + 32;
     m_overlaySurface.viewPortInfo.uvPitch = 0;
   }
   else if (m_format == RENDER_FMT_YUV420P)
