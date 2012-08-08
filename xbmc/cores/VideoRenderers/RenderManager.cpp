@@ -288,7 +288,11 @@ void CXBMCRenderManager::Update(bool bPauseDrawing)
   m_presentevent.Set();
 }
 
+#if defined(TARGET_MARVELL_DOVE)
+void CXBMCRenderManager::RenderUpdate(bool clear, bool backoffGpu, DWORD flags, DWORD alpha)
+#else
 void CXBMCRenderManager::RenderUpdate(bool clear, DWORD flags, DWORD alpha)
+#endif
 {
   { CRetakeLock<CExclusiveLock> lock(m_sharedSection);
     if (!m_pRenderer)
@@ -303,13 +307,22 @@ void CXBMCRenderManager::RenderUpdate(bool clear, DWORD flags, DWORD alpha)
     }
   }
 
+#if defined(TARGET_MARVELL_DOVE)
+  if ( backoffGpu )
+    return;
+#endif
+
   if (g_advancedSettings.m_videoDisableBackgroundDeinterlace)
   {
     CSharedLock lock(m_sharedSection);
     PresentSingle(clear, flags, alpha);
   }
   else
+#if defined(TARGET_MARVELL_DOVE)
+    Render(clear, false, flags, alpha);
+#else
     Render(clear, flags, alpha);
+#endif
 
   m_presentevent.Set();
 }
@@ -657,10 +670,16 @@ void CXBMCRenderManager::RegisterRenderUpdateCallBack(const void *ctx, RenderUpd
     m_pRenderer->RegisterRenderUpdateCallBack(ctx, fn);
 }
 
+#if defined(TARGET_MARVELL_DOVE)
+void CXBMCRenderManager::Render(bool clear, bool backoffGpu, DWORD flags, DWORD alpha)
+#else
 void CXBMCRenderManager::Render(bool clear, DWORD flags, DWORD alpha)
+#endif
 {
   CSharedLock lock(m_sharedSection);
-
+#if defined(TARGET_MARVELL_DOVE)
+  if ( ! backoffGpu ) {
+#endif
   if( m_presentmethod == PRESENT_METHOD_BOB )
     PresentFields(clear, flags, alpha);
   else if( m_presentmethod == PRESENT_METHOD_WEAVE )
@@ -671,9 +690,17 @@ void CXBMCRenderManager::Render(bool clear, DWORD flags, DWORD alpha)
     PresentSingle(clear, flags, alpha);
 
   m_overlays.Render();
+#if defined(TARGET_MARVELL_DOVE)
+  } else
+    m_presentstep = PRESENT_IDLE;
+#endif
 }
 
+#if defined(TARGET_MARVELL_DOVE)
+void CXBMCRenderManager::Present(bool backoffGpu)
+#else
 void CXBMCRenderManager::Present()
+#endif
 {
   { CRetakeLock<CExclusiveLock> lock(m_sharedSection);
     if (!m_pRenderer)
@@ -688,7 +715,11 @@ void CXBMCRenderManager::Present()
     }
   }
 
+#if defined(TARGET_MARVELL_DOVE)
+  Render(true, backoffGpu, 0, 255);
+#else
   Render(true, 0, 255);
+#endif
 
   /* wait for this present to be valid */
   if(g_graphicsContext.IsFullScreenVideo())

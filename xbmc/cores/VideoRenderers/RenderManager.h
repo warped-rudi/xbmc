@@ -57,7 +57,11 @@ public:
   void GetVideoRect(CRect &source, CRect &dest);
   float GetAspectRatio();
   void Update(bool bPauseDrawing);
+#if defined(TARGET_MARVELL_DOVE)
+  void RenderUpdate(bool clear, bool backoffGpu = false, DWORD flags = 0, DWORD alpha = 255);
+#else
   void RenderUpdate(bool clear, DWORD flags = 0, DWORD alpha = 255);
+#endif
   void SetupScreenshot();
 
   CRenderCapture* AllocRenderCapture();
@@ -130,7 +134,11 @@ public:
   // Supported pixel formats, can be called before configure
   std::vector<ERenderFormat> SupportedFormats();
 
+#if defined(TARGET_MARVELL_DOVE)
+  void Present(bool backoffGpu=false);
+#else
   void Present();
+#endif
   void Recover(); // called after resolution switch if something special is needed
 
   CSharedSection& GetSection() { return m_sharedSection; };
@@ -138,7 +146,11 @@ public:
   void RegisterRenderUpdateCallBack(const void *ctx, RenderUpdateCallBackFn fn);
 
 protected:
+#if defined(TARGET_MARVELL_DOVE)
+  void Render(bool clear, bool backoffGpu, DWORD flags, DWORD alpha);
+#else
   void Render(bool clear, DWORD flags, DWORD alpha);
+#endif
 
   void PresentSingle(bool clear, DWORD flags, DWORD alpha);
   void PresentFields(bool clear, DWORD flags, DWORD alpha);

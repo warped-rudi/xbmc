@@ -367,6 +367,10 @@ protected:
   void LoadSkin(const boost::shared_ptr<ADDON::CSkinInfo>& skin);
 
   bool m_skinReloading; // if true we disallow LoadSkin until ReloadSkin is called
+#if defined(TARGET_MARVELL_DOVE)
+  bool m_backoffGpu;
+  int m_backoffCounter;
+#endif
 
 #if defined(TARGET_DARWIN_IOS)
   friend class CWinEventsIOS;

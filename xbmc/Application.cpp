@@ -367,6 +367,10 @@ using namespace XbmcThreads;
 
 #define MAX_FFWD_SPEED 5
 
+#if defined(TARGET_MARVELL_DOVE)
+#define GPU_BACKOFF_THRESHOLD 4 // Skip 3 out of 4 renders when playback
+#endif
+
 //extern IDirectSoundRenderer* m_pAudioDecoder;
 CApplication::CApplication(void)
   : m_pPlayer(NULL)
@@ -405,6 +409,10 @@ CApplication::CApplication(void)
   m_nextPlaylistItem = -1;
   m_bPlaybackStarting = false;
   m_skinReloading = false;
+#if defined(TARGET_MARVELL_DOVE)
+  m_backoffGpu = false;
+  m_backoffCounter = 0;
+#endif
 
 #ifdef HAS_GLX
   XInitThreads();
@@ -2184,11 +2192,21 @@ bool CApplication::LoadUserWindows()
 bool CApplication::RenderNoPresent()
 {
   MEASURE_FUNCTION;
+#if defined(TARGET_MARVELL_DOVE)
+  m_backoffGpu = false;
+#endif
 
 // DXMERGE: This may have been important?
 //  g_graphicsContext.AcquireCurrentContext();
 
   g_graphicsContext.Lock();
+
+#if defined(TARGET_MARVELL_DOVE)
+  if (((m_backoffCounter % GPU_BACKOFF_THRESHOLD)) && IsPlayingVideo() && !IsPaused())
+    m_backoffGpu = true;
+
+  ++m_backoffCounter;
+#endif
 
   // dont show GUI when playing full screen video
   if (g_graphicsContext.IsFullScreenVideo())
@@ -2196,10 +2214,18 @@ bool CApplication::RenderNoPresent()
     if (m_bPresentFrame && IsPlaying() && !IsPaused())
     {
       ResetScreenSaver();
+#if defined(TARGET_MARVELL_DOVE)
+      g_renderManager.Present(m_backoffGpu);
+#else
       g_renderManager.Present();
+#endif
     }
     else
+#if defined(TARGET_MARVELL_DOVE)
+      g_renderManager.RenderUpdate(true, m_backoffGpu);
+#else
       g_renderManager.RenderUpdate(true);
+#endif
 
     // close window overlays
     CGUIDialog *overlay = (CGUIDialog *)g_windowManager.GetWindow(WINDOW_DIALOG_VIDEO_OVERLAY);
@@ -2209,7 +2235,12 @@ bool CApplication::RenderNoPresent()
 
   }
 
-  bool hasRendered = g_windowManager.Render();
+  bool hasRendered;
+#if defined(TARGET_MARVELL_DOVE)
+  hasRendered = ( m_backoffGpu ) ? true : g_windowManager.Render();
+#else
+  hasRendered = g_windowManager.Render();
+#endif
 
   g_graphicsContext.Unlock();
 
@@ -2370,8 +2401,13 @@ void CApplication::Render()
   }
   m_lastFrameTime = XbmcThreads::SystemClockMillis();
 
+#if defined(TARGET_MARVELL_DOVE)
+  if (flip && ! m_backoffGpu )
+#else
   if (flip)
+#endif
     g_graphicsContext.Flip(dirtyRegions);
+
   CTimeUtils::UpdateFrameTime(flip);
 
   g_renderManager.UpdateResolution();
