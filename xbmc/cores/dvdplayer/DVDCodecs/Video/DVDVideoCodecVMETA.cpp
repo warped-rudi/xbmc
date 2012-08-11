@@ -137,25 +137,25 @@ bool CDVDVideoCodecVMETA::Open(CDVDStreamInfo &hints, CDVDCodecOptions &options)
       m_VDecParSet.strm_fmt = IPP_VIDEO_STRM_FMT_H264;
     }
     break;
-    /*
+
     case CODEC_ID_MPEG4:
       m_VDecParSet.strm_fmt = IPP_VIDEO_STRM_FMT_MPG4;
       m_video_codec_name = "vmeta-mpeg4";
       bSendCodecConfig = true;
       break;
-    */
+
     case CODEC_ID_MPEG2VIDEO:
       m_VDecParSet.strm_fmt = IPP_VIDEO_STRM_FMT_MPG2;
       m_video_codec_name = "vmeta-mpeg2";
       bSendCodecConfig = true;
       break;
-    /*
+
     case CODEC_ID_H263:
       m_VDecParSet.strm_fmt = IPP_VIDEO_STRM_FMT_H263;
       m_video_codec_name = "vmeta-h263";
       bSendCodecConfig = true;
       break;
-    */
+
     case CODEC_ID_VC1:
       m_VDecParSet.strm_fmt = IPP_VIDEO_STRM_FMT_VC1;
       m_video_codec_name = "vmeta-vc1";
