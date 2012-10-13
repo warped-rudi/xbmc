@@ -300,6 +300,8 @@ void CDoveOverlayRenderer::ReleaseImage(int source, bool preserve)
 
 void CDoveOverlayRenderer::FlipPage(int source)
 {
+  unsigned phy_addr[3];
+  bool m_next_frame_present = false;
   if (!m_bConfigured)
     return;
 
@@ -325,10 +327,16 @@ void CDoveOverlayRenderer::FlipPage(int source)
   }
 
   //ioctl by Solid-Run not in marvel kernel
-  //if(ioctl(m_overlayfd, DOVEFB_IOCTL_NEXT_FRAME_PRESENT, &m_SoftPicture[m_currentBuffer].buf) != 0)
-
-  if(ioctl(m_overlayfd, DOVEFB_IOCTL_FLIP_VID_BUFFER, &m_overlaySurface) != 0)
-    CLog::Log(LOGERROR, "%s::%s - Error flipping\n", CLASSNAME, __func__);
+  if (m_format == RENDER_FMT_UYVY422) /* Typically frames from vMeta */
+  {
+    phy_addr[0] = (unsigned int) pPicture->nPhyAddr;
+    phy_addr[1] = (unsigned int) pPicture->nPhyAddr + (unsigned int) pPicture->nBufSize/2;
+    phy_addr[2] = (unsigned int )pPicture->nPhyAddr + (unsigned int) pPicture->nBufSize/2 + (unsigned int) pPicture->nBufSize/4;
+    m_next_frame_present = true;
+    if(ioctl(m_overlayfd, DOVEFB_IOCTL_NEXT_FRAME_PRESENT, &phy_addr) != 0)
+      CLog::Log(LOGERROR, "%s::%s - Error flipping\n", CLASSNAME, __func__);
+  } else if(ioctl(m_overlayfd, DOVEFB_IOCTL_FLIP_VID_BUFFER, &m_overlaySurface) != 0)
+      CLog::Log(LOGERROR, "%s::%s - Error flipping\n", CLASSNAME, __func__);
 
   if (m_enabled == 0)
   {
@@ -336,15 +344,14 @@ void CDoveOverlayRenderer::FlipPage(int source)
 
     if (ioctl(m_overlayfd, DOVEFB_IOCTL_SWITCH_VID_OVLY, &m_enabled) == -1)
       CLog::Log(LOGERROR, "%s::%s - Failed to enable video overlay\n", CLASSNAME, __func__);
-
   }
 
   /*
    * Is only needed for DOVEFB_IOCTL_NEXT_FRAME_PRESENT
-   *
-  if (ioctl(m_overlayfd, DOVEFB_IOCTL_WAIT_VSYNC, 0) != 0)
-    CLog::Log(LOGERROR, "%s::%s - Error waiting for vsync\n", CLASSNAME, __func__);
-  */
+   */
+  if (m_next_frame_present == true)
+    if (ioctl(m_overlayfd, DOVEFB_IOCTL_WAIT_VSYNC, 0) != 0)
+      CLog::Log(LOGERROR, "%s::%s - Error waiting for vsync\n", CLASSNAME, __func__);
 
   if( source >= 0 && source < NUM_BUFFERS )
     m_currentBuffer = source;
