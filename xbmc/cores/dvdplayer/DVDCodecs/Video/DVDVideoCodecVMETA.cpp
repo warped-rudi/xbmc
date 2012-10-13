@@ -45,8 +45,9 @@
 #include "utils/BitstreamConverter.h"
 
 #define STREAM_VDECBUF_SIZE   (2048*1024)  //must equal to or greater than 64k and multiple of 128, because of vMeta limitted
-#define STREAM_VDECBUF_NUM    5
-#define STREAM_PICBUF_NUM     16
+#define STREAM_VDECBUF_NUM    16
+#define STREAM_PICBUF_NUM     41
+#define VMETA_QUEUE_THRESHOLD 20
 
 CDVDVideoCodecVMETA::CDVDVideoCodecVMETA()
 {
@@ -545,7 +546,9 @@ int CDVDVideoCodecVMETA::Decode(uint8_t *pData, int iSize, double dts, double pt
 
   int ret = VC_BUFFER;
 
-  if(m_output_ready.size())
+  if((iSize == 0) && m_output_ready.size()) /* Demux seems empty  return VC_PICTURE */
+    ret |= VC_PICTURE;
+  if(m_output_ready.size() >= VMETA_QUEUE_THRESHOLD)
     ret |= VC_PICTURE;
 
   return ret;
