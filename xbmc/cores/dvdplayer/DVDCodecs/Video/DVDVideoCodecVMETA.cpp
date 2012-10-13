@@ -368,7 +368,7 @@ IppCodecStatus CDVDVideoCodecVMETA::DecodeInternal(uint8_t *pData, unsigned int 
 
         // make sure we allocate enough space for padding. not sure how many the decoder needs. 65*1024 seems fair enough.
         pStream->nBufSize = ((*iSize + 65*1024) + 127) & ~127;
-        pStream->pBuf = (Ipp8u*)m_DllVMETA->vdec_os_api_dma_alloc(pStream->nBufSize, VMETA_STRM_BUF_ALIGN, &pStream->nPhyAddr);
+        pStream->pBuf = (Ipp8u*)m_DllVMETA->vdec_os_api_dma_alloc_cached(pStream->nBufSize, VMETA_STRM_BUF_ALIGN , &pStream->nPhyAddr);
         if(!pStream->pBuf)
         {
           CLog::Log(LOGERROR, "%s::%s Error : Allocate streambuffer\n", CLASSNAME, __func__);
@@ -413,7 +413,7 @@ IppCodecStatus CDVDVideoCodecVMETA::DecodeInternal(uint8_t *pData, unsigned int 
             m_DllVMETA->vdec_os_api_dma_free(pPicture->pBuf);
 
           pPicture->pBuf = NULL;
-          pPicture->pBuf = (Ipp8u*)m_DllVMETA->vdec_os_api_dma_alloc(m_VDecInfo.seq_info.dis_buf_size, VMETA_DIS_BUF_ALIGN, &(pPicture->nPhyAddr));
+          pPicture->pBuf = (Ipp8u*)m_DllVMETA->vdec_os_api_dma_alloc_cached(m_VDecInfo.seq_info.dis_buf_size, VMETA_DIS_BUF_ALIGN, &(pPicture->nPhyAddr));
           pPicture->nBufSize = m_VDecInfo.seq_info.dis_buf_size;
           //printf("vdec_os_api_dma_alloc pPicture->pBuf 0x%08x nr %d\n", (unsigned int)pPicture->pBuf, (int)pPicture->pUsrData0);
         }
