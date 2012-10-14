@@ -70,6 +70,8 @@ public:
   virtual IppCodecStatus DecodeSendCmd_Vmeta(int cmd, void *pInParam, void *pOutParam, void *pSrcDecoderState) = 0;
   virtual IppCodecStatus DecodeFrame_Vmeta(IppVmetaDecInfo *pDecInfo, void *pSrcDstDecoderState) = 0;
   virtual void *vdec_os_api_dma_alloc(UNSG32 size, UNSG32 align, UNSG32 *pPhysical) = 0;
+  virtual void *vdec_os_api_dma_alloc_cached(UNSG32 size, UNSG32 align, UNSG32 *pPhysical) = 0;
+  virtual void *vdec_os_api_dma_alloc_writecombine(UNSG32 size, UNSG32 align, UNSG32 *pPhysical) = 0;
   virtual void vdec_os_api_dma_free(void *ptr) = 0;
   virtual SIGN32 vdec_os_api_suspend_check(void) = 0;
   virtual void vdec_os_api_suspend_ready(void) = 0;
@@ -86,6 +88,8 @@ class DllLibVMETA : public DllDynamic, DllLibVMETAInterface
   DEFINE_METHOD4(IppCodecStatus, DecodeSendCmd_Vmeta,     (int p1, void *p2, void *p3, void *p4))
   DEFINE_METHOD2(IppCodecStatus, DecodeFrame_Vmeta,       (IppVmetaDecInfo *p1, void *p2))
   DEFINE_METHOD3(void *,         vdec_os_api_dma_alloc,   (UNSG32 p1, UNSG32 p2, UNSG32 *p3))
+  DEFINE_METHOD3(void *,         vdec_os_api_dma_alloc_cached,   (UNSG32 p1, UNSG32 p2, UNSG32 *p3))
+  DEFINE_METHOD3(void *,         vdec_os_api_dma_alloc_writecombine,   (UNSG32 p1, UNSG32 p2, UNSG32 *p3))
   DEFINE_METHOD1(void,           vdec_os_api_dma_free,    (void *p1))
   DEFINE_METHOD0(SIGN32,         vdec_os_api_suspend_check)
   DEFINE_METHOD0(void,           vdec_os_api_suspend_ready)
@@ -98,6 +102,8 @@ class DllLibVMETA : public DllDynamic, DllLibVMETAInterface
     RESOLVE_METHOD(DecodeSendCmd_Vmeta)
     RESOLVE_METHOD(DecodeFrame_Vmeta)
     RESOLVE_METHOD(vdec_os_api_dma_alloc)
+    RESOLVE_METHOD(vdec_os_api_dma_alloc_cached)
+    RESOLVE_METHOD(vdec_os_api_dma_alloc_writecombine)
     RESOLVE_METHOD(vdec_os_api_dma_free)
     RESOLVE_METHOD(vdec_os_api_suspend_check)
     RESOLVE_METHOD(vdec_os_api_suspend_ready)
