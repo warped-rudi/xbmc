@@ -1481,13 +1481,13 @@ void CGUIWindowSettingsCategory::OnSettingChanged(BaseSettingControlPtr pSetting
     FILE *Fh;
 
     VMETA_CLK clk = (VMETA_CLK) g_guiSettings.GetInt("videoscreen.vmeta_clk");
-    CLog::Log(LOGERROR, "Changing clock to %d", clk);
+    CLog::Log(LOGDEBUG, "%s : Changing clock to %d", __FUNCTION__, clk);
     Fh = fopen("/sys/devices/platform/dove_clocks_sysfs.0/vmeta","w");
     if (Fh != 0)
     {
         fprintf (Fh, "%d",clk*1000000);
     } else
-      CLog::Log(LOGERROR, "Unable to open vmeta clock settings file");
+      CLog::Log(LOGERROR, "Unable to open vmeta clock settings file on sysfs");
     fclose(Fh);
   }
 #endif
