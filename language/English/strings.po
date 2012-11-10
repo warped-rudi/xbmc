@@ -11420,3 +11420,15 @@ msgstr ""
 msgctxt "#36041"
 msgid "* Item folder"
 msgstr ""
+
+msgctxt "#37000"
+msgid "Vmeta Clock Speed"
+msgstr ""
+
+msgctxt "#37001"
+msgid "500 MHz"
+msgstr ""
+
+msgctxt "#37002"
+msgid "667 MHz"
+msgstr ""

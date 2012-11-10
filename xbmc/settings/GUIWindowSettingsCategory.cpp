@@ -1475,6 +1475,22 @@ void CGUIWindowSettingsCategory::OnSettingChanged(BaseSettingControlPtr pSetting
 
     OnRefreshRateChanged(nextRes);
   }
+#ifdef TARGET_MARVELL_DOVE
+  else if (strSetting.Equals("videoscreen.vmeta_clk"))
+  {
+    FILE *Fh;
+
+    VMETA_CLK clk = (VMETA_CLK) g_guiSettings.GetInt("videoscreen.vmeta_clk");
+    CLog::Log(LOGERROR, "Changing clock to %d", clk);
+    Fh = fopen("/sys/devices/platform/dove_clocks_sysfs.0/vmeta","w");
+    if (Fh != 0)
+    {
+        fprintf (Fh, "%d",clk*1000000);
+    } else
+      CLog::Log(LOGERROR, "Unable to open vmeta clock settings file");
+    fclose(Fh);
+  }
+#endif
   else if (strSetting.Equals("videoscreen.vsync"))
   {
     int iControlID = pSettingControl->GetID();

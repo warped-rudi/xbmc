@@ -63,6 +63,13 @@ enum VSYNC {
   VSYNC_DRIVER       =  3
 };
 
+#ifdef TARGET_MARVELL_DOVE
+enum VMETA_CLK {
+  VMETA_CLK_500      = 500,
+  VMETA_CLK_667      = 667
+};
+#endif
+
 struct OVERSCAN
 {
   int left;

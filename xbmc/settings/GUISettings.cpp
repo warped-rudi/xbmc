@@ -435,6 +435,12 @@ void CGUISettings::Initialize()
   AddSeparator(vs, "videoscreen.sep1");
 #endif
 
+#ifdef TARGET_MARVELL_DOVE
+  map<int,int> vmeta_clk;
+  vmeta_clk.insert(make_pair(37001,VMETA_CLK_500));
+  vmeta_clk.insert(make_pair(37002,VMETA_CLK_667));
+  AddInt(vs, "videoscreen.vmeta_clk", 37000, VMETA_CLK_500, vmeta_clk, SPIN_CONTROL_TEXT);
+#endif
   map<int,int> vsync;
 #if defined(_LINUX) && !defined(TARGET_DARWIN)
   vsync.insert(make_pair(13101,VSYNC_DRIVER));
