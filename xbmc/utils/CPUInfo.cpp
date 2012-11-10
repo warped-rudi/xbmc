@@ -235,7 +235,10 @@ CCPUInfo::CCPUInfo(void)
   // read from the new location of the temperature data on new kernels, 2.6.39, 3.0 etc
   if (m_fProcTemperature == NULL)   
     m_fProcTemperature = fopen("/sys/class/hwmon/hwmon0/temp1_input", "r");
-  
+  // some systems put thsi information here ...
+  if (m_fProcTemperature == NULL)
+    m_fProcTemperature = fopen("/sys/class/hwmon/hwmon0/device/temp1_input", "r");
+
   m_fCPUInfo = fopen("/proc/cpuinfo", "r");
   m_cpuCount = 0;
   if (m_fCPUInfo)
@@ -245,7 +248,17 @@ CCPUInfo::CCPUInfo(void)
     int nCurrId = 0;
     while (fgets(buffer, sizeof(buffer), m_fCPUInfo))
     {
-      if (strncmp(buffer, "processor", strlen("processor"))==0)
+      if (strncmp(buffer, "Processor", strlen("Processor"))==0)
+      {
+        char *needle = strstr(buffer, ":");
+        if (needle)
+        {
+	  CStdString s(needle+2);
+	  s.Trim();
+          m_cpuModel = s;
+        }
+      }
+      else if (strncmp(buffer, "processor", strlen("processor"))==0)
       {
         char *needle = strstr(buffer, ":");
         if (needle)

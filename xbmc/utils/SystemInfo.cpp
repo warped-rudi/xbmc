@@ -74,7 +74,8 @@ CStdString CSysInfoJob::GetCPUFreqInfo()
 {
   CStdString strCPUFreq;
   double CPUFreq = GetCPUFrequency();
-  strCPUFreq.Format("%4.2fMHz", CPUFreq);
+  if (CPUFreq > 0)
+    strCPUFreq.Format("%4.2fMHz", CPUFreq);
   return strCPUFreq;
 }
 
