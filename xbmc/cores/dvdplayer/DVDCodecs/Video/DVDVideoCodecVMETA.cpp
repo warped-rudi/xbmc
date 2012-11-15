@@ -583,12 +583,13 @@ bool CDVDVideoCodecVMETA::GetPicture(DVDVideoPicture *pDvdVideoPicture)
 
     unsigned char *pDisplayStart      = ((Ipp8u*)pPicture->pic.ppPicPlane[0]) + (pPicture->pic.picROI.y)*(pPicture->pic.picPlaneStep[0]) + ((pPicture->pic.picROI.x)<<1);
 
+    /* data[1] and data[2] are not needed in UYVY */
     pDvdVideoPicture->data[0]         = pDisplayStart;
-    pDvdVideoPicture->iLineSize[0]    = ALIGN (m_picture_width, 4);
-    pDvdVideoPicture->data[1]         = pDvdVideoPicture->data[0] + pDvdVideoPicture->iLineSize[0] * ALIGN (m_picture_width, 2);
-    pDvdVideoPicture->iLineSize[1]    = ALIGN (m_picture_height, 8) / 2;
-    pDvdVideoPicture->data[2]         = (BYTE *)pDisplayStart;
-    pDvdVideoPicture->iLineSize[2]    = pDvdVideoPicture->iLineSize[1];
+    pDvdVideoPicture->iLineSize[0]    = ALIGN (pPicture->pic.picWidth, 4);
+    pDvdVideoPicture->data[1]         = 0;
+    pDvdVideoPicture->iLineSize[1]    = 0;
+    pDvdVideoPicture->data[2]         = 0;
+    pDvdVideoPicture->iLineSize[2]    = 0;
     if (!m_pts_queue.empty())
     {
       //pDvdVideoPicture->pts = m_pts_queue.front();

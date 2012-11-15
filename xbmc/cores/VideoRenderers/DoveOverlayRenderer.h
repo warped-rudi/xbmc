@@ -126,6 +126,9 @@ typedef struct _OutputBuffer
   IppVmetaPicture *pPicture;
   bool            bFree;
   unsigned char   *buf[3];
+  /* Original data from pPicture */
+  BYTE* data[4];      // [4] = alpha channel, currently not used
+  int iLineSize[4];   // [4] = alpha channel, currently not used
 } OutputBuffer;
 
 class CDoveOverlayRenderer : public CBaseRenderer
@@ -142,7 +145,7 @@ class CDoveOverlayRenderer : public CBaseRenderer
     void CreateThumbnail(CBaseTexture *texture, unsigned int width, unsigned int height);
 
     // Player functions
-    virtual void ManageDisplay();
+    virtual void ManageDisplay(bool first);
     virtual bool Configure(unsigned int width, unsigned int height, unsigned int d_width, unsigned int d_height,
                            float fps, unsigned int flags, ERenderFormat format, unsigned extended_format, unsigned int orientation);
     virtual bool IsConfigured() { return m_bConfigured; }
