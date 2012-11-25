@@ -439,7 +439,7 @@ void CGUISettings::Initialize()
   map<int,int> vmeta_clk;
   vmeta_clk.insert(make_pair(37001,VMETA_CLK_500));
   vmeta_clk.insert(make_pair(37002,VMETA_CLK_667));
-  AddInt(vs, "videoscreen.vmeta_clk", 37000, VMETA_CLK_500, vmeta_clk, SPIN_CONTROL_TEXT);
+  AddInt(vs, "videoscreen.vmeta_clk", 37000, VMETA_CLK_667, vmeta_clk, SPIN_CONTROL_TEXT);
 #endif
   map<int,int> vsync;
 #if defined(_LINUX) && !defined(TARGET_DARWIN)
