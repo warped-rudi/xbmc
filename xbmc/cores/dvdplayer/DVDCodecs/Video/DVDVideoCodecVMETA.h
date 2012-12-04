@@ -54,6 +54,7 @@ public:
   bool ClearPicture(DVDVideoPicture* pDvdVideoPicture);
   int  GetFrameCount() { return m_Frames; };
   const char* GetName() { return m_video_codec_name.c_str(); };
+  uint8_t * digest_mpeg4_inbuf(uint8_t *pData, int iSize);
 protected:
   // Video format
   bool                            m_drop_state;
@@ -85,6 +86,9 @@ protected:
   std::queue<double>              m_pts_queue;
 
   unsigned int                    m_Frames;
+  int                             m_itime_inc_bits;
+  int                             m_low_delay;
+  int                             m_codec_species;
 
   DllLibMiscGen                   *m_DllMiscGen;
   DllLibVMETA                     *m_DllVMETA;
