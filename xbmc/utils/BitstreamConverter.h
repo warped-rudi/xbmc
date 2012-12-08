@@ -118,11 +118,13 @@ public:
   void Close(void);
   bool NeedConvert(void) { return m_convert_bitstream; };
   bool Convert(uint8_t *pData, int iSize);
+  bool Convert(uint8_t *pData, int iSize, uint8_t *pBuffer, uint32_t *pBuffSize, bool retry);
   uint8_t *GetConvertBuffer(void);
   int GetConvertSize();
   uint8_t *GetExtraData(void);
   int GetExtraSize();
   void parseh264_sps(const uint8_t *sps, const uint32_t sps_size, bool *interlaced, int32_t *max_ref_frames);
+
 protected:
   // bytestream (Annex B) to bistream conversion support.
   void nal_bs_init(nal_bitstream *bs, const uint8_t *data, size_t size);
@@ -136,8 +138,8 @@ protected:
   const int isom_write_avcc(AVIOContext *pb, const uint8_t *data, int len);
   // bitstream to bytestream (Annex B) conversion support.
   bool BitstreamConvertInit(void *in_extradata, int in_extrasize);
-  bool BitstreamConvert(uint8_t* pData, int iSize, uint8_t **poutbuf, int *poutbuf_size);
-  void BitstreamAllocAndCopy( uint8_t **poutbuf, int *poutbuf_size,
+  bool BitstreamConvert(uint8_t* pData, int iSize);
+  inline void BitstreamAllocAndCopy(
     const uint8_t *sps_pps, uint32_t sps_pps_size, const uint8_t *in, uint32_t in_size);
 
   typedef struct omx_bitstream_ctx {
@@ -146,6 +148,11 @@ protected:
       uint8_t *sps_pps_data;
       uint32_t size;
   } omx_bitstream_ctx;
+
+  int               m_byteStreamSize;
+  int               m_byteStreamAlloc;
+  uint8_t           *m_byteStreamBuffer;
+  uint8_t           m_first_idr_state;
 
   uint8_t           *m_convertBuffer;
   int               m_convertSize;

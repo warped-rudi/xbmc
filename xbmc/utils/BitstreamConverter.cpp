@@ -424,6 +424,10 @@ CBitstreamConverter::CBitstreamConverter()
   m_dllAvUtil         = NULL;
   m_dllAvFormat       = NULL;
   m_convert_bytestream = false;
+
+  m_byteStreamSize    = 0;
+  m_byteStreamAlloc   = -1;
+  m_byteStreamBuffer  = NULL;
 }
 
 CBitstreamConverter::~CBitstreamConverter()
@@ -591,21 +595,18 @@ bool CBitstreamConverter::Convert(uint8_t *pData, int iSize)
     {
       if(m_to_annexb)
       {
-        int demuxer_bytes = iSize;
-  
-        uint8_t *demuxer_content = pData;
-
         if (m_convert_bitstream)
         {
           // convert demuxer packet from bitstream to bytestream (AnnexB)
-          int bytestream_size = 0;
-          uint8_t *bytestream_buff = NULL;
+          m_byteStreamSize = 0;
+          m_byteStreamAlloc = -1;
+          m_byteStreamBuffer = 0;
 
-          BitstreamConvert(demuxer_content, demuxer_bytes, &bytestream_buff, &bytestream_size);
-          if (bytestream_buff && (bytestream_size > 0))
+          BitstreamConvert(pData, iSize);
+          if (m_byteStreamBuffer && m_byteStreamSize > 0)
           {
-            m_convertSize   = bytestream_size;
-            m_convertBuffer = bytestream_buff;
+            m_convertSize   = m_byteStreamSize;
+            m_convertBuffer = m_byteStreamBuffer;
           }
           else
           {
@@ -770,11 +771,12 @@ bool CBitstreamConverter::BitstreamConvertInit(void *in_extradata, int in_extras
   m_sps_pps_context.sps_pps_data = out;
   m_sps_pps_context.size = total_size;
   m_sps_pps_context.first_idr = 1;
+  m_first_idr_state = 1;
 
   return true;
 }
 
-bool CBitstreamConverter::BitstreamConvert(uint8_t* pData, int iSize, uint8_t **poutbuf, int *poutbuf_size)
+bool CBitstreamConverter::BitstreamConvert(uint8_t* pData, int iSize)
 {
   // based on h264_mp4toannexb_bsf.c (ffmpeg)
   // which is Copyright (c) 2007 Benoit Fouet <benoit.fouet@free.fr>
@@ -809,13 +811,13 @@ bool CBitstreamConverter::BitstreamConvert(uint8_t* pData, int iSize, uint8_t **
     // prepend only to the first type 5 NAL unit of an IDR picture
     if (m_sps_pps_context.first_idr && unit_type == 5)
     {
-      BitstreamAllocAndCopy(poutbuf, poutbuf_size,
+      BitstreamAllocAndCopy(
         m_sps_pps_context.sps_pps_data, m_sps_pps_context.size, buf, nal_size);
       m_sps_pps_context.first_idr = 0;
     }
     else
     {
-      BitstreamAllocAndCopy(poutbuf, poutbuf_size, NULL, 0, buf, nal_size);
+      BitstreamAllocAndCopy(NULL, 0, buf, nal_size);
       if (!m_sps_pps_context.first_idr && unit_type == 1)
           m_sps_pps_context.first_idr = 1;
     }
@@ -827,44 +829,100 @@ bool CBitstreamConverter::BitstreamConvert(uint8_t* pData, int iSize, uint8_t **
   return true;
 
 fail:
-  free(*poutbuf);
-  *poutbuf = NULL;
-  *poutbuf_size = 0;
+  if (m_byteStreamAlloc < 0)
+  {
+    free(m_byteStreamBuffer);
+    m_byteStreamBuffer = 0;
+  }
+
+  m_byteStreamSize = 0;
   return false;
 }
 
-void CBitstreamConverter::BitstreamAllocAndCopy( uint8_t **poutbuf, int *poutbuf_size,
+void CBitstreamConverter::BitstreamAllocAndCopy(
     const uint8_t *sps_pps, uint32_t sps_pps_size, const uint8_t *in, uint32_t in_size)
 {
   // based on h264_mp4toannexb_bsf.c (ffmpeg)
   // which is Copyright (c) 2007 Benoit Fouet <benoit.fouet@free.fr>
   // and Licensed GPL 2.1 or greater
 
-  #define CHD_WB32(p, d) { \
-    ((uint8_t*)(p))[3] = (d); \
-    ((uint8_t*)(p))[2] = (d) >> 8; \
-    ((uint8_t*)(p))[1] = (d) >> 16; \
-    ((uint8_t*)(p))[0] = (d) >> 24; }
+  uint32_t offset = m_byteStreamSize;
+  uint32_t nal_header_size = offset ?  3 : 4;
 
-  uint32_t offset = *poutbuf_size;
-  uint8_t nal_header_size = offset ? 3 : 4;
+  m_byteStreamSize += sps_pps_size + in_size + nal_header_size;
 
-  *poutbuf_size += sps_pps_size + in_size + nal_header_size;
-  *poutbuf = (uint8_t*)realloc(*poutbuf, *poutbuf_size);
+  if (m_byteStreamAlloc < 0)
+  {
+    m_byteStreamBuffer = (uint8_t*)realloc(m_byteStreamBuffer, m_byteStreamSize);
+  }
+  else if (m_byteStreamSize > m_byteStreamAlloc)
+  {
+    return;
+  }
+
+  uint8_t *p = m_byteStreamBuffer + offset;
+
   if (sps_pps)
-    memcpy(*poutbuf + offset, sps_pps, sps_pps_size);
+    memcpy(p, sps_pps, sps_pps_size);
 
-  memcpy(*poutbuf + sps_pps_size + nal_header_size + offset, in, in_size);
+  p += sps_pps_size + nal_header_size;
+
   if (!offset)
-  {
-    CHD_WB32(*poutbuf + sps_pps_size, 1);
-  }
-  else
-  {
-    (*poutbuf + offset + sps_pps_size)[0] = 0;
-    (*poutbuf + offset + sps_pps_size)[1] = 0;
-    (*poutbuf + offset + sps_pps_size)[2] = 1;
-  }
+    p[-4] = 0x00;
+
+  p[-3] = 0x00;
+  p[-2] = 0x00;
+  p[-1] = 0x01;
+
+  memcpy(p, in, in_size);
 }
 
+bool CBitstreamConverter::Convert(uint8_t *pData, int iSize, uint8_t *pBuffer, uint32_t *pBuffSize, bool retry)
+{
+  uint32_t buffSize = *pBuffSize;
+
+  if (pData && m_codec == CODEC_ID_H264 && m_to_annexb)
+  {
+    if (!m_convert_bitstream)
+    {
+      if( buffSize > (uint32_t)iSize)
+        buffSize = iSize;
+
+      memcpy(pBuffer, pData, buffSize);
+
+      *pBuffSize = iSize;
+      return true;
+    }
+
+    if (retry)
+      m_sps_pps_context.first_idr = m_first_idr_state;
+    else
+      m_first_idr_state = m_sps_pps_context.first_idr;
+
+    m_byteStreamBuffer = pBuffer;
+    m_byteStreamAlloc = buffSize;
+    m_byteStreamSize = 0;
+
+    BitstreamConvert(pData, iSize);
+
+    *pBuffSize = m_byteStreamSize;
+    return true;
+  }
+
+  if (Convert(pData, iSize))
+  {
+    uint32_t convSize = GetConvertSize();
+
+    if (buffSize > convSize)
+      buffSize = convSize;
+
+    memcpy(pBuffer, GetConvertBuffer(), buffSize);
+
+    *pBuffSize = convSize;
+    return true;
+  }
+
+  *pBuffSize = 0;
+  return false;
+}
 
