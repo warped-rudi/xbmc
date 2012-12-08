@@ -54,7 +54,11 @@ public:
   bool ClearPicture(DVDVideoPicture* pDvdVideoPicture);
   int  GetFrameCount() { return m_Frames; };
   const char* GetName() { return m_video_codec_name.c_str(); };
+
+private:
   uint8_t * digest_mpeg4_inbuf(uint8_t *pData, int iSize);
+  uint8_t * digest_mpeg2_inbuf(uint8_t *pData, int iSize);
+
 protected:
   // Video format
   bool                            m_drop_state;
@@ -78,7 +82,7 @@ protected:
 
   std::queue<IppVmetaBitstream*>  m_input_available;
   std::vector<IppVmetaBitstream*> m_input_buffers;
-  unsigned int m_input_size;
+  unsigned int                    m_input_size;
 
   std::queue<IppVmetaPicture*>    m_output_ready;
   std::queue<IppVmetaPicture*>    m_output_available;

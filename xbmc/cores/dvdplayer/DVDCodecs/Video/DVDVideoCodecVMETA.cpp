@@ -512,17 +512,28 @@ IppCodecStatus CDVDVideoCodecVMETA::DecodeInternal(uint8_t *pData, unsigned int 
 int CDVDVideoCodecVMETA::Decode(uint8_t *pData, int iSize, double dts, double pts)
 {
   IppCodecStatus retCodec;
-  uint8_t *digest_ret;
   int rounds = 1, i, iSize2nd=0;
-  if ((m_VDecParSet.strm_fmt == IPP_VIDEO_STRM_FMT_MPG4) && (pData))
+
+  if (pData)
   {
-    digest_ret = digest_mpeg4_inbuf(pData, iSize);
-    if ((uint32_t)digest_ret == 0xffffffff) rounds = 0; // Skip null VOP
-    else if ((uint32_t)digest_ret)
+    if (m_VDecParSet.strm_fmt == IPP_VIDEO_STRM_FMT_MPG4)
     {
-      iSize2nd = (pData+iSize) - digest_ret;
-      iSize = digest_ret - pData;
-      rounds = 2;
+      uint8_t *digest_ret = digest_mpeg4_inbuf(pData, iSize);
+
+      if ((uint32_t)digest_ret == 0xffffffff)
+      {
+        rounds = 0; // Skip null VOP
+      }
+      else if ((uint32_t)digest_ret)
+      {
+        iSize2nd = (pData+iSize) - digest_ret;
+        iSize = digest_ret - pData;
+        rounds = 2;
+      }
+    }
+    else if (m_VDecParSet.strm_fmt == IPP_VIDEO_STRM_FMT_MPG2)
+    {
+      digest_mpeg2_inbuf(pData, iSize);
     }
   }
 
@@ -896,4 +907,47 @@ uint8_t * CDVDVideoCodecVMETA::digest_mpeg4_inbuf(uint8_t *pData, int iSize)
   }
   return p2ndVop;
 }
+
+
+uint8_t * CDVDVideoCodecVMETA::digest_mpeg2_inbuf(uint8_t *pData, int iSize)
+{
+  uint8_t *pSeqHead = Seek4bytesCode(pData, iSize, 0x00000100|MPEG2_SCID_SEQ);
+
+  if (pSeqHead)
+  {
+    iSize -= pSeqHead - pData;
+
+    if (iSize >= 12)
+    {
+      int width, height, aspect_ratio_code;
+
+      width  = (pSeqHead[4] << 4) | (pSeqHead[5] >> 4);
+      height = ((pSeqHead[5] & 0x0f) << 8) | pSeqHead[6];
+      aspect_ratio_code = pSeqHead[7] >> 4;
+
+      switch (aspect_ratio_code)
+      {
+      case 2:                   // IAR 4:3
+          m_decoded_width = (height * 4) / 3;
+          break;
+      case 3:                   // IAR 16:9
+          m_decoded_width = (height * 16) / 9;
+          break;
+      case 4:                   // IAR 2.21:1
+          m_decoded_width = (height * 221) / 100;
+          break;
+      default:                  // PAR 1:1
+          m_decoded_width = width;
+      }
+
+      m_decoded_height = height;
+
+      return pSeqHead;
+    }
+  }
+
+  return 0;
+}
+
+
 #endif
