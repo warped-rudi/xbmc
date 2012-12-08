@@ -31,7 +31,6 @@
 #include "DynamicDll.h"
 
 #include "utils/log.h"
-#include "linux/XMemUtils.h"
 #include "DVDClock.h"
 
 #include <sys/time.h>
@@ -40,14 +39,50 @@
 #ifdef CLASSNAME
 #undef CLASSNAME
 #endif
+
 #define CLASSNAME "CDVDVideoCodecVMETA"
 
 #include "utils/BitstreamConverter.h"
 
-#define STREAM_VDECBUF_SIZE   (2048*1024)  //must equal to or greater than 64k and multiple of 128, because of vMeta limitted
-#define STREAM_VDECBUF_NUM    16
-#define STREAM_PICBUF_NUM     41
-#define VMETA_QUEUE_THRESHOLD 20
+
+//#define ENABLE_MPEG1            // use vMeta for MPEG1 decoding
+//#define ENABLE_PTS              // honour presentation time stamps
+
+
+#define ALIGN_SIZE(x, n)        (((x) + (n) - 1) & (~((n) - 1)))
+#define ALIGN_OFFSET(x, n)      ((-(x)) & ((n) - 1))
+
+#define PADDED_SIZE(s)          ALIGN_SIZE((s), 128)    // align to multiple of 128 (vMeta requirement)
+#define PADDING_LEN(s)          ALIGN_OFFSET((s), 128)  // align to multiple of 128 (vMeta requirement)
+#define PADDING_BYTE            0x88            // the vmeta decoder needs a padding of 0x88 at the end of a frame
+
+#define STREAM_VDECBUF_SIZE     (512*1024U)     // must equal to or greater than 64k and multiple of 128
+#define STREAM_VDECBUF_NUM      7               // number of stream buffers
+#define STREAM_PICBUF_NUM       24              // number of picture buffers
+#define VMETA_QUEUE_HIGHMARK    22              // maximal # of buffered pictures
+#define VMETA_QUEUE_LOWMARK     2               // minimal # of buffered pictures
+
+
+#if STREAM_VDECBUF_NUM >= STREAM_FIFO_SIZE
+#error "Please adjust STREAM_FIFO_SIZE !"
+#endif
+
+#if STREAM_PICBUF_NUM >= PICTURE_FIFO_SIZE
+#error "Please adjust PICTURE_FIFO_SIZE !"
+#endif
+
+
+#if 1
+  #define CLEAR_STREAMBUF(p)    do { \
+    (p)->nDataLen = 0; \
+    } while (0)
+#else
+  #define CLEAR_STREAMBUF(p)    do { \
+    (p)->nDataLen = 0; \
+    memset((p)->pBuf, PADDING_BYTE, (p)->nBufSize); \
+  } while (0)
+#endif
+
 
 CDVDVideoCodecVMETA::CDVDVideoCodecVMETA()
 {
@@ -57,7 +92,8 @@ CDVDVideoCodecVMETA::CDVDVideoCodecVMETA()
   m_converter         = NULL;
   m_video_convert     = false;
   m_video_codec_name  = "";
-  m_Frames            = 0;
+  m_frame_no          = 0;
+  m_numBufSubmitted   = 0;
 
   m_DllMiscGen        = new DllLibMiscGen();
   m_DllVMETA          = new DllLibVMETA();
@@ -69,37 +105,38 @@ CDVDVideoCodecVMETA::CDVDVideoCodecVMETA()
   m_codec_species     = -1;
 }
 
+
 CDVDVideoCodecVMETA::~CDVDVideoCodecVMETA()
 {
-  if (m_is_open)
-    Dispose();
+  Dispose();
 }
+
 
 bool CDVDVideoCodecVMETA::Open(CDVDStreamInfo &hints, CDVDCodecOptions &options)
 {
-  if(!m_DllVMETA->Load() || !m_DllMiscGen->Load())
+  if (!m_DllVMETA->Load() || !m_DllMiscGen->Load())
+  {
+    CLog::Log(LOGERROR, "%s::%s Error : failed to load vMeta libs !", CLASSNAME, __func__);
     return false;
+  }
 
-  bool bSendCodecConfig = false;
-
-  m_decoded_width   = hints.width;
-  m_decoded_height  = hints.height;
-  m_picture_width   = m_decoded_width;
-  m_picture_height  = m_decoded_height;
+  m_picture_width  = m_decoded_width  = hints.width;
+  m_picture_height = m_decoded_height = hints.height;
 
   if(!m_decoded_width || !m_decoded_height)
     return false;
 
-  m_converter     = new CBitstreamConverter();
-  m_video_convert = m_converter->Open(hints.codec, (uint8_t *)hints.extradata, hints.extrasize, true);
+  m_converter = new CBitstreamConverter();
 
-  if(m_video_convert)
+  if (m_converter->Open(hints.codec,
+                        (uint8_t *)hints.extradata,
+                        hints.extrasize, true) )
   {
-    if(m_converter->GetExtraData() != NULL && m_converter->GetExtraSize() > 0)
+    if (m_converter->GetExtraData() && m_converter->GetExtraSize() > 0)
     {
       m_extrasize = m_converter->GetExtraSize();
       m_extradata = (uint8_t *)malloc(m_extrasize);
-      memcpy(m_extradata, m_converter->GetExtraData(), m_converter->GetExtraSize());
+      memcpy(m_extradata, m_converter->GetExtraData(), m_extrasize);
     }
   }
   else
@@ -108,12 +145,14 @@ bool CDVDVideoCodecVMETA::Open(CDVDStreamInfo &hints, CDVDCodecOptions &options)
     {
       m_extrasize = hints.extrasize;
       m_extradata = (uint8_t *)malloc(m_extrasize);
-      memcpy(m_extradata, hints.extradata, hints.extrasize);
+      memcpy(m_extradata, hints.extradata, m_extrasize);
     }
   }
 
-  memset(&m_VDecParSet, 0, sizeof(IppVmetaDecParSet));
+  bool bSendCodecConfig = false;
+
   memset(&m_VDecInfo, 0, sizeof(IppVmetaDecInfo));
+  memset(&m_VDecParSet, 0, sizeof(IppVmetaDecParSet));
 
   switch (hints.codec)
   {
@@ -166,10 +205,19 @@ bool CDVDVideoCodecVMETA::Open(CDVDStreamInfo &hints, CDVDCodecOptions &options)
       m_video_codec_name = "vmeta-vc1";
       bSendCodecConfig = true;
       break;
+
+#ifdef ENABLE_MPEG1
+    case CODEC_ID_MPEG1VIDEO:
+      m_VDecParSet.strm_fmt = IPP_VIDEO_STRM_FMT_MPG1;
+      m_video_codec_name = "vmeta-mpeg1";
+      bSendCodecConfig = true;
+      break;
+#endif
+
     default:
-      CLog::Log(LOGDEBUG, "%s::%s CodecID 0x%08x not supported by VMETA decoder\n", CLASSNAME, __func__, hints.codec);
+      CLog::Log(LOGDEBUG, "%s::%s CodecID 0x%08x not supported by VMETA decoder",
+                CLASSNAME, __func__, hints.codec);
       return false;
-    break;
   }
 
   m_VDecParSet.opt_fmt = IPP_YCbCr422I;
@@ -178,7 +226,7 @@ bool CDVDVideoCodecVMETA::Open(CDVDStreamInfo &hints, CDVDCodecOptions &options)
 
   if(m_DllMiscGen->miscInitGeneralCallbackTable(&m_pCbTable) != 0)
   {
-    CLog::Log(LOGERROR, "%s::%s Error : miscInitGeneralCallbackTable\n", CLASSNAME, __func__);
+    CLog::Log(LOGERROR, "%s::%s Error : miscInitGeneralCallbackTable", CLASSNAME, __func__);
     Dispose();
     return false;
   }
@@ -186,450 +234,522 @@ bool CDVDVideoCodecVMETA::Open(CDVDStreamInfo &hints, CDVDCodecOptions &options)
   ret = m_DllVMETA->DecoderInitAlloc_Vmeta(&m_VDecParSet, m_pCbTable, &m_pDecState);
   if(ret != IPP_STATUS_NOERR)
   {
-    CLog::Log(LOGERROR, "%s::%s Error : DecoderInitAlloc_Vmeta\n", CLASSNAME, __func__);
+    CLog::Log(LOGERROR, "%s::%s Error : DecoderInitAlloc_Vmeta", CLASSNAME, __func__);
     Dispose();
     return false;
   }
 
   for (size_t i = 0; i < STREAM_VDECBUF_NUM; i++)
   {
-    IppVmetaBitstream *pStream = NULL;
-    pStream = (IppVmetaBitstream *)malloc(sizeof(IppVmetaBitstream));
+    IppVmetaBitstream *pStream = (IppVmetaBitstream *)malloc(sizeof(IppVmetaBitstream));
     memset(pStream, 0, sizeof(IppVmetaBitstream));
 
-    /*
+    pStream->pBuf = (Ipp8u *)m_DllVMETA->vdec_os_api_dma_alloc_cached(
+                                STREAM_VDECBUF_SIZE, VMETA_STRM_BUF_ALIGN, &pStream->nPhyAddr);
     pStream->nBufSize = STREAM_VDECBUF_SIZE;
-    pStream->pBuf = (Ipp8u*)m_DllVMETA->vdec_os_api_dma_alloc(pStream->nBufSize, VMETA_STRM_BUF_ALIGN, &pStream->nPhyAddr);
-    if(pStream->pBuf == NULL)
-    {
-      Dispose();
-      return false;
-    }
-    */
+    CLEAR_STREAMBUF(pStream);
 
-    m_input_buffers.push_back(pStream);
-    m_input_available.push(pStream);
+    m_input_buffers.push_front(pStream);
+    m_input_available.putTail(pStream);
   }
 
   for (size_t i = 0; i < STREAM_PICBUF_NUM; i++)
   {
-    IppVmetaPicture *pPicture = NULL;
-    pPicture = (IppVmetaPicture *)malloc(sizeof(IppVmetaPicture));
+    IppVmetaPicture *pPicture = (IppVmetaPicture *)malloc(sizeof(IppVmetaPicture));
     memset(pPicture, 0, sizeof(IppVmetaPicture));
+
     pPicture->pUsrData0 = (void *)i;
 
-    m_output_buffers.push_back(pPicture);
-    m_output_available.push(pPicture);
+    m_output_buffers.push_front(pPicture);
+    m_output_available.putTail(pPicture);
   }
 
-  m_Frames        = 0;
-  m_is_open       = true;
+  m_video_convert = m_converter->NeedConvert();
+  m_numBufSubmitted = 0;
+  m_frame_no = 0;
+  m_is_open = true;
 
   if(bSendCodecConfig)
     SendCodecConfig();
 
-  CLog::Log(LOGDEBUG, "%s::%s - VMETA Decoder opened with codec : %s [%dx%d]", CLASSNAME, __func__,
-            m_video_codec_name.c_str(), m_decoded_width, m_decoded_height);
+  CLog::Log(LOGDEBUG, "%s::%s - VMETA Decoder opened with codec : %s [%dx%d]",
+            CLASSNAME, __func__, m_video_codec_name.c_str(), m_decoded_width, m_decoded_height);
 
   return true;
 }
 
+
 void CDVDVideoCodecVMETA::Dispose()
 {
-  m_is_open       = false;
+  m_is_open = false;
 
-  if(m_extradata)
-    free(m_extradata);
-  m_extradata = NULL;
+  m_frame_no = 0;
   m_extrasize = 0;
-
-  if(m_converter)
-    delete m_converter;
-  m_converter         = NULL;
-  m_video_convert     = false;
+  m_numBufSubmitted = 0;
+  m_video_convert = false;
   m_video_codec_name  = "";
 
-  if(m_pDecState)
+  if (m_extradata)
+  {
+    free(m_extradata);
+    m_extradata = 0;
+  }
+
+  if (m_converter)
+  {
+    delete m_converter;
+    m_converter = 0;
+  }
+
+  if (m_pDecState)
   {
     m_DllVMETA->DecodeSendCmd_Vmeta(IPPVC_STOP_DECODE_STREAM, NULL, NULL, m_pDecState);
 
     Reset();
 
     m_DllVMETA->DecoderFree_Vmeta(&m_pDecState);
+    m_pDecState = 0;
   }
-  m_pDecState = NULL;
 
-  if(m_pCbTable)
+  if (m_pCbTable)
   {
     m_DllMiscGen->miscFreeGeneralCallbackTable(&m_pCbTable);
+    m_pCbTable = 0;
   }
-  m_pCbTable = NULL;
 
-  for (size_t i = 0; i < m_input_buffers.size(); i++)
+
+  m_input_ready.flushAll();
+  m_input_available.flushAll();
+  while (!m_input_buffers.empty())
   {
-    IppVmetaBitstream *pStream = m_input_buffers[i];
+    IppVmetaBitstream *pStream = m_input_buffers.front();
+    m_input_buffers.pop_front();
+
     if(pStream->pBuf)
       m_DllVMETA->vdec_os_api_dma_free(pStream->pBuf);
-    free(m_input_buffers[i]);
+    free(pStream);
   }
 
-  m_input_buffers.clear();
 
-  while(!m_input_available.empty())
-    m_input_available.pop();
-
-  for (size_t i = 0; i < m_output_buffers.size(); i++)
+  m_output_ready.flushAll();
+  m_output_available.flushAll();
+  while (!m_output_buffers.empty())
   {
-    IppVmetaPicture *pPicture = m_output_buffers[i];
+    IppVmetaPicture *pPicture = m_output_buffers.front();
+    m_output_buffers.pop_front();
+
     if(pPicture->pBuf)
       m_DllVMETA->vdec_os_api_dma_free(pPicture->pBuf);
-    free(m_output_buffers[i]);
+    free(pPicture);
   }
 
-  m_output_buffers.clear();
 
-  while(!m_output_available.empty())
-    m_output_available.pop();
+  if (m_DllVMETA)
+  {
+    m_DllVMETA->Unload();
+    delete m_DllVMETA;
+    m_DllVMETA = 0;
+  }
 
-  m_Frames        = 0;
-
-  m_DllVMETA->Unload();
-  m_DllMiscGen->Unload();
-
-  delete m_DllMiscGen;
-  delete m_DllVMETA;
+  if (m_DllMiscGen)
+  {
+    m_DllMiscGen->Unload();
+    delete m_DllMiscGen;
+    m_DllMiscGen = 0;
+  }
 }
+
 
 void CDVDVideoCodecVMETA::SetDropState(bool bDrop)
 {
   m_drop_state = bDrop;
 }
 
+
 IppCodecStatus CDVDVideoCodecVMETA::SendCodecConfig()
 {
+  unsigned paddingLen;
   IppCodecStatus retCodec;
+  IppVmetaBitstream *pStream;
 
-  if(m_extradata == NULL || m_extrasize == 0 || m_pDecState == NULL || m_input_available.empty())
-    return IPP_STATUS_ERR;
-
-  IppVmetaBitstream *pStream = m_input_available.front();
-
-  if(pStream->pBuf)
-    m_DllVMETA->vdec_os_api_dma_free(pStream->pBuf);
-
-  pStream->nBufSize = ((m_extrasize + 65*1024) + 127) & ~127;
-  pStream->nDataLen = m_extrasize;
-  pStream->pBuf = (Ipp8u*)m_DllVMETA->vdec_os_api_dma_alloc(pStream->nBufSize, VMETA_STRM_BUF_ALIGN, &pStream->nPhyAddr);
-  pStream->nFlag = IPP_VMETA_STRM_BUF_END_OF_UNIT;
-
-  if(!pStream->pBuf)
+  if (!m_extradata || !m_extrasize ||
+      !m_pDecState || !m_input_available.getHead(pStream) )
   {
-    printf("%s::%s Error : Allocate streambuffer\n", CLASSNAME, __func__);
     return IPP_STATUS_ERR;
   }
 
   memcpy(pStream->pBuf, m_extradata, m_extrasize);
+  pStream->nDataLen = m_extrasize;
+  pStream->nFlag    = IPP_VMETA_STRM_BUF_END_OF_UNIT;
 
-  retCodec = m_DllVMETA->DecoderPushBuffer_Vmeta(IPP_VMETA_BUF_TYPE_STRM, (void *)pStream, m_pDecState);
+  paddingLen = PADDING_LEN(m_extrasize);
+  if (paddingLen)
+    memset(pStream->pBuf + m_extrasize, PADDING_BYTE, paddingLen);
 
+  retCodec = m_DllVMETA->DecoderPushBuffer_Vmeta(IPP_VMETA_BUF_TYPE_STRM, pStream, m_pDecState);
   if(retCodec != IPP_STATUS_NOERR)
   {
-    printf("%s::%s Error : Push streambuffer\n", CLASSNAME, __func__);
+    CLog::Log(LOGERROR, "%s::%s Error : Push streambuffer", CLASSNAME, __func__);
+
+    m_input_available.putTail(pStream);
     return IPP_STATUS_ERR;
   }
-
-  m_input_available.pop();
 
   return IPP_STATUS_NOERR;
 }
 
-IppCodecStatus CDVDVideoCodecVMETA::DecodeInternal(uint8_t *pData, unsigned int *iSize, double dts, double pts)
-{
-  void *pPopTmp;
-  IppVmetaBitstream *pStream;
-  IppVmetaPicture *pPicture;
-  IppCodecStatus retCodec;
-
-  retCodec = m_DllVMETA->DecodeFrame_Vmeta(&m_VDecInfo, m_pDecState);
-
-  //printf("m_input_available.size() %d m_output_available.size() %d m_output_ready.size() %d\n",
-  //       m_input_available.size(), m_output_available.size(), m_output_ready.size());
-
-  switch(retCodec)
-  {
-    case IPP_STATUS_WAIT_FOR_EVENT:
-      //printf("IPP_STATUS_WAIT_FOR_EVENT\n");
-      break;
-    case IPP_STATUS_NEED_INPUT:
-      if(m_input_available.empty())
-         CLog::Log(LOGDEBUG, "IPP_STATUS_NEED_INPUT no free input buffers\n");
-      if(!m_input_available.empty() && *iSize != 0)
-      {
-        //printf("IPP_STATUS_NEED_INPUT\n");
-        IppVmetaBitstream *pStream = m_input_available.front();
-
-        if(pStream->pBuf)
-          m_DllVMETA->vdec_os_api_dma_free(pStream->pBuf);
-
-        // make sure we allocate enough space for padding. not sure how many the decoder needs. 65*1024 seems fair enough.
-        pStream->nBufSize = ((*iSize + 65*1024) + 127) & ~127;
-        pStream->pBuf = (Ipp8u*)m_DllVMETA->vdec_os_api_dma_alloc_cached(pStream->nBufSize, VMETA_STRM_BUF_ALIGN , &pStream->nPhyAddr);
-        if(!pStream->pBuf)
-        {
-          CLog::Log(LOGERROR, "%s::%s Error : Allocate streambuffer\n", CLASSNAME, __func__);
-          return IPP_STATUS_ERR;
-        }
-
-        // the vmeta decoder needs a padding of 0x88 at the end of a frame
-        pStream->nDataLen = *iSize;
-        pStream->nFlag = IPP_VMETA_STRM_BUF_END_OF_UNIT;
-        memset(pStream->pBuf, 0x88, pStream->nBufSize);
-        memcpy(pStream->pBuf, pData, *iSize);
-
-        retCodec = m_DllVMETA->DecoderPushBuffer_Vmeta(IPP_VMETA_BUF_TYPE_STRM, (void *)pStream, m_pDecState);
-
-        if(retCodec != IPP_STATUS_NOERR)
-        {
-          CLog::Log(LOGERROR, "%s::%s Error : Push streambuffer\n", CLASSNAME, __func__);
-          return IPP_STATUS_ERR;
-        }
-
-        m_input_available.pop();
-        *iSize = 0;
-      }
-      break;
-    case IPP_STATUS_END_OF_STREAM:
-      //printf("IPP_STATUS_END_OF_STREAM\n");
-      break;
-    case IPP_STATUS_NEED_OUTPUT_BUF:
-      if(m_output_available.empty())
-        CLog::Log(LOGDEBUG, "IPP_STATUS_FRAME_COMPLETE no free pictures buffers\n");
-      //printf("IPP_STATUS_NEED_OUTPUT_BUF\n");
-      if(!m_output_available.empty())
-      {
-        IppVmetaPicture *pPicture = m_output_available.front();
-        m_output_available.pop();
-        if(!pPicture)
-          return IPP_STATUS_ERR;
-
-        if(m_VDecInfo.seq_info.dis_buf_size >  pPicture->nBufSize)
-        {
-          if(pPicture->pBuf)
-            m_DllVMETA->vdec_os_api_dma_free(pPicture->pBuf);
-
-          pPicture->pBuf = NULL;
-          pPicture->pBuf = (Ipp8u*)m_DllVMETA->vdec_os_api_dma_alloc_cached(m_VDecInfo.seq_info.dis_buf_size, VMETA_DIS_BUF_ALIGN, &(pPicture->nPhyAddr));
-          pPicture->nBufSize = m_VDecInfo.seq_info.dis_buf_size;
-          //printf("vdec_os_api_dma_alloc pPicture->pBuf 0x%08x nr %d\n", (unsigned int)pPicture->pBuf, (int)pPicture->pUsrData0);
-        }
-        if(pPicture->pBuf == NULL)
-        {
-          CLog::Log(LOGERROR, "%s::%s Error : Allocate picture\n", CLASSNAME, __func__);
-          m_output_available.push(pPicture);
-          return IPP_STATUS_ERR;
-        }
-        m_DllVMETA->DecoderPushBuffer_Vmeta(IPP_VMETA_BUF_TYPE_PIC, (void*)pPicture, m_pDecState);
-      }
-      break;
-    case IPP_STATUS_RETURN_INPUT_BUF:
-      //printf("IPP_STATUS_RETURN_INPUT_BUF\n");
-      for(;;)
-      {
-        m_DllVMETA->DecoderPopBuffer_Vmeta(IPP_VMETA_BUF_TYPE_STRM, &pPopTmp, m_pDecState);
-        pStream = (IppVmetaBitstream*)pPopTmp;
-        if(pStream == NULL)
-          break;
-        m_input_available.push(pStream);
-      }
-      break;
-    case IPP_STATUS_FRAME_COMPLETE:
-      for(;;)
-      {
-        m_DllVMETA->DecoderPopBuffer_Vmeta(IPP_VMETA_BUF_TYPE_STRM, &pPopTmp, m_pDecState);
-        pStream = (IppVmetaBitstream*)pPopTmp;
-        if(pStream == NULL)
-          break;
-        m_input_available.push(pStream);
-      }
-      //printf("IPP_STATUS_FRAME_COMPLETE\n");
-      {
-        // The gstreamer plugins says this is needed for DOVE
-        IppCodecStatus suspendRet;
-        if(m_DllVMETA->vdec_os_api_suspend_check())
-        {
-          suspendRet = m_DllVMETA->DecodeSendCmd_Vmeta(IPPVC_PAUSE, NULL, NULL, m_pDecState);
-          if(suspendRet == IPP_STATUS_NOERR)
-          {
-            m_DllVMETA->vdec_os_api_suspend_ready();
-            suspendRet = m_DllVMETA->DecodeSendCmd_Vmeta(IPPVC_RESUME, NULL, NULL, m_pDecState);
-            if(suspendRet != IPP_STATUS_NOERR)
-            {
-              CLog::Log(LOGERROR, "%s::%s resume failed\n", CLASSNAME, __func__);
-            }
-          }
-          else
-          {
-            CLog::Log(LOGERROR, "%s::%s pause failed\n", CLASSNAME, __func__);
-          }
-        }
-
-        m_DllVMETA->DecoderPopBuffer_Vmeta(IPP_VMETA_BUF_TYPE_PIC, &pPopTmp, m_pDecState);
-        pPicture = (IppVmetaPicture *)pPopTmp;
-        if(pPicture)
-        {
-          pPicture->pUsrData1 = (void*)m_Frames;
-          m_output_ready.push(pPicture);
-
-          m_Frames++;
-        }
-      }
-      break;
-    case IPP_STATUS_NEW_VIDEO_SEQ:
-      if(m_VDecInfo.seq_info.picROI.width != 0 && m_VDecInfo.seq_info.picROI.height != 0)
-      {
-        m_picture_width   = m_VDecInfo.seq_info.picROI.width;
-        m_picture_height  = m_VDecInfo.seq_info.picROI.height;
-        CLog::Log(LOGDEBUG, "%s::%s New sequence picture dimension [%dx%d]\n",
-              CLASSNAME, __func__, m_picture_width, m_picture_height);
-      }
-      for(;;)
-      {
-        m_DllVMETA->DecoderPopBuffer_Vmeta(IPP_VMETA_BUF_TYPE_PIC, &pPopTmp, m_pDecState);
-        pPicture = (IppVmetaPicture *)pPopTmp;
-        if(pPicture == NULL)
-          break;
-        m_output_available.push(pPicture);
-      }
-      break;
-    default:
-      return IPP_STATUS_ERR;
-      break;
-  }
-
-  return retCodec;
-}
 
 int CDVDVideoCodecVMETA::Decode(uint8_t *pData, int iSize, double dts, double pts)
 {
-  IppCodecStatus retCodec;
-  int rounds = 1, i, iSize2nd=0;
+  int iSize2nd = 0;
+#ifdef ENABLE_PTS
+  int numStreamBufs = 0;
+#endif
 
   if (pData)
   {
     if (m_VDecParSet.strm_fmt == IPP_VIDEO_STRM_FMT_MPG4)
     {
+      // special handling: MPEG4 packed bitstream
       uint8_t *digest_ret = digest_mpeg4_inbuf(pData, iSize);
 
       if ((uint32_t)digest_ret == 0xffffffff)
       {
-        rounds = 0; // Skip null VOP
+        pData = 0;
+        iSize = 0;      // Skip null VOP
       }
       else if ((uint32_t)digest_ret)
       {
-        iSize2nd = (pData+iSize) - digest_ret;
-        iSize = digest_ret - pData;
-        rounds = 2;
+        int iTemp = digest_ret - pData;
+        iSize2nd = iSize - iTemp;
+        iSize = iTemp;
       }
     }
     else if (m_VDecParSet.strm_fmt == IPP_VIDEO_STRM_FMT_MPG2)
     {
+      // special handling: determine MPEG2 aspect ratio
       digest_mpeg2_inbuf(pData, iSize);
     }
   }
 
-  for (i = 0; i < rounds; i++) {
-    // MPEG4 packed bitstream second VOP. Change pointers to point to second VOP
-    if (i == 1) {
-      pData = pData + iSize;
-      iSize = iSize2nd;
-    }
-    if (pData || iSize > 0)
+
+  while (iSize > 0)
+  {
+    IppVmetaBitstream *pStream;
+
+    // retrieve empty stream buffer
+    if (m_input_available.getHead(pStream))
     {
-      unsigned int demuxer_bytes = (unsigned int)iSize;
-      uint8_t *demuxer_content = pData;
+      uint32_t dataLen = pStream->nBufSize;
 
-      if(m_video_convert)
+      // convert or copy data
+      if (m_video_convert)
       {
-        m_converter->Convert(pData, iSize);
-        demuxer_bytes = m_converter->GetConvertSize();
-        demuxer_content = m_converter->GetConvertBuffer();
-        if(!demuxer_bytes && demuxer_bytes < 1)
+        m_converter->Convert(pData, iSize, pStream->pBuf, &dataLen, false);
+      }
+      else
+      {
+        memcpy(pStream->pBuf, pData, std::min<uint32_t>(dataLen, iSize));
+        dataLen = (uint32_t)iSize;
+      }
+
+      // did it fit in ?
+      if (PADDED_SIZE(dataLen) > pStream->nBufSize)
+      {
+        m_DllVMETA->vdec_os_api_dma_free(pStream->pBuf);
+
+        dataLen = ALIGN_SIZE(dataLen, 65536) + 65536;
+        pStream->pBuf = (Ipp8u *)m_DllVMETA->vdec_os_api_dma_alloc_cached(
+                              dataLen, VMETA_STRM_BUF_ALIGN, &pStream->nPhyAddr);
+        pStream->nBufSize = dataLen;
+        pStream->nDataLen = 0;
+
+        // retry (using a larger buffer)
+        if (m_video_convert)
         {
-          return VC_BUFFER;
+          m_converter->Convert(pData, iSize, pStream->pBuf, &dataLen, true);
+        }
+        else
+        {
+          memcpy(pStream->pBuf, pData, iSize);
+          dataLen = (uint32_t)iSize;
         }
       }
 
-      m_pts_queue.push(pts);
-
-      double start = CDVDClock::GetAbsoluteClock();
-      for(;;)
+      if (dataLen)
       {
-        retCodec = DecodeInternal(demuxer_content, &demuxer_bytes, dts, pts);
-        if(retCodec == IPP_STATUS_FRAME_COMPLETE || retCodec == IPP_STATUS_NEED_INPUT || retCodec == IPP_STATUS_ERR)
-          break;
+        pStream->nFlag = IPP_VMETA_STRM_BUF_END_OF_UNIT;
+        pStream->nDataLen = dataLen;
 
-        // decoding timeout.
-        // TODO: should we store the decoding data and try it on the next decode again ?
-        if((CDVDClock::GetAbsoluteClock() - start) > (double)DVD_MSEC_TO_TIME(500))
+        dataLen = PADDING_LEN(dataLen);
+        if (dataLen)
+          memset(pStream->pBuf + pStream->nDataLen, PADDING_BYTE, dataLen);
+
+        if( !m_input_ready.putTail(pStream) )
         {
-          CLog::Log(LOGERROR, "%s::%s decoder timeout\n", CLASSNAME, __func__);
+          CLog::Log(LOGERROR, "%s::%s m_input_ready fifo overflow", CLASSNAME, __func__);
+
+          CLEAR_STREAMBUF(pStream);
+          m_input_available.putTail(pStream);
           break;
         }
+
+#ifdef ENABLE_PTS
+        if( numStreamBufs++ == 0)
+        {
+          m_pts_queue.putTail(pts);
+        }
+#endif
       }
+      else
+      {
+        CLog::Log(LOGERROR, "%s::%s converter returned nothing !", CLASSNAME, __func__);
+
+        m_input_available.putTail(pStream);
+      }
+    }
+    else
+    {
+      CLog::Log(LOGERROR, "%s::%s no stream buffer available", CLASSNAME, __func__);
+      break;
+    }
+
+    // MPEG4 packed bitstream second VOP. Change pointers to point to second VOP
+    pData   += iSize;
+    iSize    = iSize2nd;
+    iSize2nd = 0;
+  }
+
+
+  double start = CDVDClock::GetAbsoluteClock();
+
+  for(;;)
+  {
+    IppCodecStatus retCodec = DecodeInternal();
+
+    if (retCodec == IPP_STATUS_FRAME_COMPLETE || retCodec == IPP_STATUS_NEED_INPUT || retCodec == IPP_STATUS_ERR)
+      break;
+
+    // decoding timeout.
+    // TODO: should we store the decoding data and try it on the next decode again ?
+    if((CDVDClock::GetAbsoluteClock() - start) > (double)DVD_MSEC_TO_TIME(500))
+    {
+      CLog::Log(LOGERROR, "%s::%s decoder timeout retCodec = %d", CLASSNAME, __func__, retCodec);
+      break;
     }
   }
 
-  int ret = VC_BUFFER;
+  int pictureCount = m_output_ready.usedCount();
 
-  if((iSize == 0) && m_output_ready.size()) /* Demux seems empty  return VC_PICTURE */
-    ret |= VC_PICTURE;
-  if(m_output_ready.size() >= VMETA_QUEUE_THRESHOLD)
-    ret |= VC_PICTURE;
+  if( pictureCount >= VMETA_QUEUE_HIGHMARK )
+    return VC_PICTURE;
 
-  return ret;
+  if( pData && pictureCount < VMETA_QUEUE_LOWMARK )
+    return VC_BUFFER;
+
+  return ( pictureCount ) ?  (VC_PICTURE | VC_BUFFER) : VC_BUFFER;
 }
+
+
+IppCodecStatus CDVDVideoCodecVMETA::DecodeInternal()
+{
+  IppVmetaPicture *pPicture;
+  IppVmetaBitstream *pStream;
+
+  IppCodecStatus retCodec = m_DllVMETA->DecodeFrame_Vmeta(&m_VDecInfo, m_pDecState);
+
+  switch(retCodec)
+  {
+    case IPP_STATUS_NEED_INPUT:
+      //CLog::Log(LOGNOTICE, "IPP_STATUS_NEED_INPUT");
+      while (m_input_ready.getHead(pStream))
+      {
+        retCodec = m_DllVMETA->DecoderPushBuffer_Vmeta(IPP_VMETA_BUF_TYPE_STRM, pStream, m_pDecState);
+        if (retCodec != IPP_STATUS_NOERR)
+        {
+          CLog::Log(LOGERROR, "IPP_STATUS_NEED_INPUT: push streambuffer failed");
+
+          CLEAR_STREAMBUF(pStream);
+          m_input_available.putTail(pStream);
+          return IPP_STATUS_ERR;
+        }
+
+        m_numBufSubmitted++;
+      }
+      break;
+
+    case IPP_STATUS_RETURN_INPUT_BUF:
+      //CLog::Log(LOGNOTICE, "IPP_STATUS_RETURN_INPUT_BUF");
+      while (m_numBufSubmitted)
+      {
+        m_DllVMETA->DecoderPopBuffer_Vmeta(IPP_VMETA_BUF_TYPE_STRM, (void **)&pStream, m_pDecState);
+
+        if (!pStream)
+          break;
+
+        CLEAR_STREAMBUF(pStream);
+        m_input_available.putTail(pStream);
+        m_numBufSubmitted--;
+      }
+      break;
+
+    case IPP_STATUS_FRAME_COMPLETE:
+      //CLog::Log(LOGNOTICE, "IPP_STATUS_FRAME_COMPLETE");
+      m_DllVMETA->DecoderPopBuffer_Vmeta(IPP_VMETA_BUF_TYPE_PIC, (void **)&pPicture, m_pDecState);
+
+      if (pPicture)
+      {
+        pPicture->pUsrData1 = (void *)m_frame_no;
+        m_frame_no++;
+
+        if (!m_output_ready.putTail(pPicture))
+        {
+          CLog::Log(LOGERROR, "%s::%s m_output_ready fifo overflow", CLASSNAME, __func__);
+          m_output_available.putTail(pPicture);
+        }
+      }
+
+      while (m_numBufSubmitted)
+      {
+        m_DllVMETA->DecoderPopBuffer_Vmeta(IPP_VMETA_BUF_TYPE_STRM, (void **)&pStream, m_pDecState);
+
+        if (!pStream)
+          break;
+
+        CLEAR_STREAMBUF(pStream);
+        m_input_available.putTail(pStream);
+        m_numBufSubmitted--;
+      }
+
+      // The gstreamer plugins says this is needed for DOVE
+      if (m_DllVMETA->vdec_os_api_suspend_check())
+      {
+        IppCodecStatus suspendRet = m_DllVMETA->DecodeSendCmd_Vmeta(IPPVC_PAUSE, NULL, NULL, m_pDecState);
+        if (suspendRet == IPP_STATUS_NOERR)
+        {
+          m_DllVMETA->vdec_os_api_suspend_ready();
+
+          suspendRet = m_DllVMETA->DecodeSendCmd_Vmeta(IPPVC_RESUME, NULL, NULL, m_pDecState);
+          if (suspendRet != IPP_STATUS_NOERR)
+          {
+            CLog::Log(LOGERROR, "%s::%s resume failed", CLASSNAME, __func__);
+          }
+        }
+        else
+        {
+          CLog::Log(LOGERROR, "%s::%s pause failed", CLASSNAME, __func__);
+        }
+      }
+      break;
+
+    case IPP_STATUS_NEED_OUTPUT_BUF:
+      //CLog::Log(LOGNOTICE, "IPP_STATUS_NEED_OUTPUT_BUF");
+      if (!m_output_available.getHead(pPicture))
+      {
+        CLog::Log(LOGDEBUG, "IPP_STATUS_NEED_OUTPUT_BUF: no free pictures buffers");
+        return IPP_STATUS_ERR;
+      }
+
+      if (m_VDecInfo.seq_info.dis_buf_size > pPicture->nBufSize)
+      {
+        if (pPicture->pBuf)
+          m_DllVMETA->vdec_os_api_dma_free(pPicture->pBuf);
+
+        pPicture->pBuf = (Ipp8u *)m_DllVMETA->vdec_os_api_dma_alloc_cached(
+                            m_VDecInfo.seq_info.dis_buf_size, VMETA_DIS_BUF_ALIGN, &(pPicture->nPhyAddr));
+        pPicture->nBufSize = m_VDecInfo.seq_info.dis_buf_size;
+        //printf("vdec_os_api_dma_alloc pPicture->pBuf 0x%08x nr %d\n", (unsigned int)pPicture->pBuf, (int)pPicture->pUsrData0);
+      }
+
+      if (!pPicture->pBuf)
+      {
+        CLog::Log(LOGERROR, "IPP_STATUS_NEED_OUTPUT_BUF: allocate picture failed");
+        pPicture->nBufSize = 0;
+        pPicture->nPhyAddr = 0;
+        m_output_available.putTail(pPicture);
+        return IPP_STATUS_ERR;
+      }
+
+      retCodec = m_DllVMETA->DecoderPushBuffer_Vmeta(IPP_VMETA_BUF_TYPE_PIC, pPicture, m_pDecState);
+      if(retCodec != IPP_STATUS_NOERR)
+      {
+        CLog::Log(LOGERROR, "IPP_STATUS_NEED_OUTPUT_BUF: push picturebuffer failed");
+        m_output_available.putTail(pPicture);
+        return IPP_STATUS_ERR;
+      }
+      break;
+
+    case IPP_STATUS_NEW_VIDEO_SEQ:
+      //CLog::Log(LOGNOTICE, "IPP_STATUS_NEW_VIDEO_SEQ");
+      if (m_VDecInfo.seq_info.picROI.width != 0 && m_VDecInfo.seq_info.picROI.height != 0)
+      {
+        m_picture_width   = m_VDecInfo.seq_info.picROI.width;
+        m_picture_height  = m_VDecInfo.seq_info.picROI.height;
+        CLog::Log(LOGDEBUG, "IPP_STATUS_NEW_VIDEO_SEQ: New sequence picture dimension [%dx%d]",
+                  m_picture_width, m_picture_height);
+      }
+
+      for(;;)
+      {
+        m_DllVMETA->DecoderPopBuffer_Vmeta(IPP_VMETA_BUF_TYPE_PIC, (void **)&pPicture, m_pDecState);
+
+        if (!pPicture)
+          break;
+
+        m_output_available.putTail(pPicture);
+      }
+      break;
+
+    case IPP_STATUS_END_OF_STREAM:
+      //CLog::Log(LOGNOTICE, "IPP_STATUS_END_OF_STREAM");
+      break;
+
+    case IPP_STATUS_WAIT_FOR_EVENT:
+      //CLog::Log(LOGNOTICE, "IPP_STATUS_WAIT_FOR_EVENT");
+      break;
+
+    default:
+      CLog::Log(LOGERROR, "%s::%s DecodeFrame_Vmeta returned %d", CLASSNAME, __func__, retCodec);
+      return IPP_STATUS_ERR;
+  }
+
+  return retCodec;
+}
+
 
 bool CDVDVideoCodecVMETA::GetPicture(DVDVideoPicture *pDvdVideoPicture)
 {
-  // clone the video picture buffer settings.
-  bool bRet = false;
+  IppVmetaPicture       *pPicture;
 
-  if(!m_output_ready.empty())
+  pDvdVideoPicture->dts             = DVD_NOPTS_VALUE;
+  pDvdVideoPicture->pts             = DVD_NOPTS_VALUE;
+  pDvdVideoPicture->format          = RENDER_FMT_UYVY422;
+
+  pDvdVideoPicture->iDisplayWidth   = m_decoded_width;
+  pDvdVideoPicture->iDisplayHeight  = m_decoded_height;
+  pDvdVideoPicture->iWidth          = m_picture_width;
+  pDvdVideoPicture->iHeight         = m_picture_height;
+
+  if (m_output_ready.getHead(pPicture))
   {
-    IppVmetaPicture *pPicture = m_output_ready.front();
-    m_output_ready.pop();
-
-    if(!pPicture)
-    {
-      CLog::Log(LOGERROR, "%s::%s Error : Picture NULL\n", CLASSNAME, __func__);
-      return false;
-    }
-
-    pDvdVideoPicture->vmeta = pPicture;
-
-    pDvdVideoPicture->dts             = DVD_NOPTS_VALUE;
-    pDvdVideoPicture->pts             = DVD_NOPTS_VALUE;
-    pDvdVideoPicture->format          = RENDER_FMT_UYVY422;
-
-    pDvdVideoPicture->iDisplayWidth   = m_decoded_width;
-    pDvdVideoPicture->iDisplayHeight  = m_decoded_height;
-    pDvdVideoPicture->iWidth          = m_picture_width;
-    pDvdVideoPicture->iHeight         = m_picture_height;
-
-    unsigned char *pDisplayStart      = ((Ipp8u*)pPicture->pic.ppPicPlane[0]) + (pPicture->pic.picROI.y)*(pPicture->pic.picPlaneStep[0]) + ((pPicture->pic.picROI.x)<<1);
-
-    /* data[1] and data[2] are not needed in UYVY */
-    pDvdVideoPicture->data[0]         = pDisplayStart;
-    pDvdVideoPicture->iLineSize[0]    = ALIGN (pPicture->pic.picWidth, 4);
-    pDvdVideoPicture->data[1]         = 0;
+    // clone the video picture buffer settings.
+    pDvdVideoPicture->vmeta           = pPicture;
+    pDvdVideoPicture->data[0]         = (Ipp8u *)(pPicture->pic.ppPicPlane[0]) +
+                                        (pPicture->pic.picROI.y * pPicture->pic.picPlaneStep[0]) +
+                                        (pPicture->pic.picROI.x << 1);
+    pDvdVideoPicture->iLineSize[0]    = ALIGN_SIZE(pPicture->pic.picWidth, 4);
+    pDvdVideoPicture->data[1]         = 0;      // not needed in UYVY
     pDvdVideoPicture->iLineSize[1]    = 0;
-    pDvdVideoPicture->data[2]         = 0;
+    pDvdVideoPicture->data[2]         = 0;      // not needed in UYVY
     pDvdVideoPicture->iLineSize[2]    = 0;
-    if (!m_pts_queue.empty())
-    {
-      //pDvdVideoPicture->pts = m_pts_queue.front();
-      m_pts_queue.pop();
-    }
+
+    pDvdVideoPicture->iFlags          = DVP_FLAG_ALLOCATED;
+    pDvdVideoPicture->iFlags         |= m_drop_state ? DVP_FLAG_DROPPED : 0;
+
+#ifdef ENABLE_PTS
+    if (!m_pts_queue.isEmpty())
+      m_pts_queue.getHead(pDvdVideoPicture->pts);
+#endif
 
     /*
     printf("%d : pic width [%dx%d] [%d:%d:%d] [0x%08x:0x%08x:0x%08x] %f\n",
@@ -639,83 +759,82 @@ bool CDVDVideoCodecVMETA::GetPicture(DVDVideoPicture *pDvdVideoPicture)
            (unsigned int)pDvdVideoPicture->data[2], (double)pDvdVideoPicture->pts / (double)DVD_TIME_BASE);
     */
 
-#undef ALIGN
-
-    pDvdVideoPicture->iFlags  = DVP_FLAG_ALLOCATED;
-    pDvdVideoPicture->iFlags |= m_drop_state ? DVP_FLAG_DROPPED : 0;
-    bRet = true;
+    return true;
   }
-  /*
-  else
-  {
-    pDvdVideoPicture->iFlags = DVP_FLAG_DROPPED;
-    bRet = false;
-  }
-  */
 
-  return bRet;
+  pDvdVideoPicture->vmeta           = 0;
+  pDvdVideoPicture->iFlags          = 0; //DVP_FLAG_DROPPED;
+
+  pDvdVideoPicture->data[0]         = 0;
+  pDvdVideoPicture->iLineSize[0]    = 0;
+  pDvdVideoPicture->data[1]         = 0;
+  pDvdVideoPicture->iLineSize[1]    = 0;
+  pDvdVideoPicture->data[2]         = 0;
+  pDvdVideoPicture->iLineSize[2]    = 0;
+
+  return false;
 }
 
-bool CDVDVideoCodecVMETA::ClearPicture(DVDVideoPicture* pDvdVideoPicture)
+
+bool CDVDVideoCodecVMETA::ClearPicture(DVDVideoPicture *pDvdVideoPicture)
 {
   // release any previous retained image buffer ref that
   // has not been passed up to renderer (ie. dropped frames, etc).
-  if(pDvdVideoPicture->vmeta)
-  {
-    IppVmetaPicture *pPicture = (IppVmetaPicture *)pDvdVideoPicture->vmeta;
-    //printf("CDVDVideoCodecVMETA::ClearPicture 0x%08x 0x%08x 0x%08x\n", pDvdVideoPicture->vmeta, pPicture, pPicture->pBuf);
-    m_output_available.push(pPicture);
-    pDvdVideoPicture->vmeta = NULL;
-  }
+  if (pDvdVideoPicture->vmeta)
+    m_output_available.putTail(pDvdVideoPicture->vmeta);
 
   memset(pDvdVideoPicture, 0, sizeof(DVDVideoPicture));
   return true;
 }
 
+
 void CDVDVideoCodecVMETA::Reset(void)
 {
-  if(!m_is_open)
+  IppVmetaPicture *pPicture;
+  IppVmetaBitstream *pStream;
+
+  if (!m_is_open)
     return;
 
-  IppVmetaBitstream *pStream = NULL;
-  IppVmetaPicture *pPicture = NULL;
+#ifdef ENABLE_PTS
+  m_pts_queue.flushAll();
+#endif
 
-  while(!m_output_ready.empty())
+  while (m_input_ready.getHead(pStream))
   {
-    pPicture = m_output_ready.front();
-    m_output_ready.pop();
-    m_output_available.push(pPicture);
+    CLEAR_STREAMBUF(pStream);
+    m_input_available.putTail(pStream);
   }
 
-  pPicture = NULL;
+  for(;;)
+  {
+    m_DllVMETA->DecoderPopBuffer_Vmeta(IPP_VMETA_BUF_TYPE_STRM, (void **)&pStream, m_pDecState);
 
-  for(;;) {
-    m_DllVMETA->DecoderPopBuffer_Vmeta(IPP_VMETA_BUF_TYPE_STRM, (void**)&pStream, m_pDecState);
-    if(pStream != NULL)
-    {
-      m_input_available.push(pStream);
-    }
-    else
-    {
+    if(!pStream)
       break;
-    }
+
+    CLEAR_STREAMBUF(pStream);
+    m_input_available.putTail(pStream);
   }
-  for(;;) {
-    m_DllVMETA->DecoderPopBuffer_Vmeta(IPP_VMETA_BUF_TYPE_PIC, (void**)&pPicture, m_pDecState);
-    if(pPicture != NULL)
-    {
-      m_output_available.push(pPicture);
-    }
-    else
-    {
+
+  m_numBufSubmitted = 0;
+
+  while (m_output_ready.getHead(pPicture))
+    m_output_available.putTail(pPicture);
+
+  for(;;)
+  {
+    m_DllVMETA->DecoderPopBuffer_Vmeta(IPP_VMETA_BUF_TYPE_PIC, (void **)&pPicture, m_pDecState);
+
+    if(!pPicture)
       break;
-    }
+
+    m_output_available.putTail(pPicture);
   }
-
-  while (!m_pts_queue.empty())
-    m_pts_queue.pop();
-
 }
+
+
+
 
 /* mpeg4v2 packed bitstream unpacking code - based on code from Marvell vmeta gstreamer plugin */
 #define PACKSTM_SKIPVOP_MAXLEN  15	//15 is just a rough estimation
@@ -723,8 +842,10 @@ void CDVDVideoCodecVMETA::Reset(void)
 #define MPEG2_SCID_SEQEND       0xb7
 #define MPEG2_SCID_PIC          0x00
 #define MPEG2_SCID_GOP          0xb8
+#define MPEG2_SCID_EXTHDR       0xb5
 #define MPEG4_SCID_VOP          0xb6
-static int parse_mpeg4_TIB(unsigned char* p, int len, int* plow_delay)
+
+static int parse_mpeg4_TIB(unsigned char *p, int len, int *plow_delay)
 {
 #define __GETnBITS_InByte(B, Bitoff, N, Code)	{Code = (B<<(24+Bitoff))>>(32-N); Bitoff += N;}
   unsigned int SCode;
@@ -762,7 +883,7 @@ static int parse_mpeg4_TIB(unsigned char* p, int len, int* plow_delay)
       Byte = *++p;
       bitoff = 1;
     } else
-	bitoff = 2;
+        bitoff = 2;
 
     __GETnBITS_InByte(Byte, bitoff, 4, code);  //aspect_ratio_info
     if(code == 0xf) {
@@ -779,7 +900,7 @@ static int parse_mpeg4_TIB(unsigned char* p, int len, int* plow_delay)
       bitoff = bitoff + 2 - 8;
       __GETnBITS_InByte(Byte, bitoff, 1, code);//low_delay
       *plow_delay = code;
-      CLog::Log(LOGDEBUG, "found mpeg4 stream low_delay %d\n", code);
+      CLog::Log(LOGDEBUG, "found mpeg4 stream low_delay %d", code);
       __GETnBITS_InByte(Byte, bitoff, 1, code);//vbv_parameters
       if(code)
       {
@@ -808,7 +929,7 @@ static int parse_mpeg4_TIB(unsigned char* p, int len, int* plow_delay)
     if((vtir>>16) == 0)
       return -3;
 
-    CLog::Log(LOGDEBUG, "parse_mpeg4_TIB parsed vtir %d\n", vtir>>16);
+    CLog::Log(LOGDEBUG, "parse_mpeg4_TIB parsed vtir %d", vtir>>16);
     vtir -= 0x10000;
     for(time_inc_bits = 16; time_inc_bits>0; time_inc_bits--)
     {
@@ -818,12 +939,12 @@ static int parse_mpeg4_TIB(unsigned char* p, int len, int* plow_delay)
     }
     if(time_inc_bits == 0)
       time_inc_bits = 1;
-    CLog::Log(LOGDEBUG, "parse_mpeg4_TIB() parsed time_inc_bits %d\n", time_inc_bits);
+    CLog::Log(LOGDEBUG, "parse_mpeg4_TIB() parsed time_inc_bits %d", time_inc_bits);
     return time_inc_bits;
   }
 }
 
-static unsigned char* Seek4bytesCode(unsigned char* pData, int len, unsigned int n4byteCode)
+static inline unsigned char *Seek4bytesCode(unsigned char *pData, int len, unsigned int n4byteCode)
 {
   if(len >= 4)
   {
@@ -843,12 +964,12 @@ static unsigned char* Seek4bytesCode(unsigned char* pData, int len, unsigned int
   return NULL;
 }
 
-static int is_MPEG4_SkipVop(unsigned char* pData, int len, int itime_inc_bits_len)
+static int is_MPEG4_SkipVop(unsigned char *pData, int len, int itime_inc_bits_len)
 {
   if(len > 4 && len <= PACKSTM_SKIPVOP_MAXLEN && itime_inc_bits_len > 0)
   {
     //probably, we needn't to check the frame coding type, check the data length is enough
-    unsigned char* p = Seek4bytesCode(pData, len, 0x00000100 | MPEG4_SCID_VOP);
+    unsigned char *p = Seek4bytesCode(pData, len, 0x00000100 | MPEG4_SCID_VOP);
     if(p != NULL) {
       p += 4;
       len -= (p-pData);
@@ -878,19 +999,17 @@ static int is_MPEG4_SkipVop(unsigned char* pData, int len, int itime_inc_bits_le
   return 0;
 }
 
-static unsigned char* seek2ndVop(unsigned char* pData, int len)
+static inline unsigned char *seek2ndVop(unsigned char *pData, int len)
 {
-  unsigned char* p = Seek4bytesCode(pData, len, 0x00000100 | MPEG4_SCID_VOP);
-  unsigned char* p2 = NULL;
-  if(p!=NULL)
-    p2 = Seek4bytesCode(p+4, len-(p+4-pData), 0x00000100 | MPEG4_SCID_VOP);
-  return p2;
+  unsigned char *p = Seek4bytesCode(pData, len, 0x00000100 | MPEG4_SCID_VOP);
+  return p ? Seek4bytesCode(p+4, len-(p+4-pData), 0x00000100 | MPEG4_SCID_VOP) : NULL;
 }
 
 
-uint8_t * CDVDVideoCodecVMETA::digest_mpeg4_inbuf(uint8_t *pData, int iSize)
+uint8_t *CDVDVideoCodecVMETA::digest_mpeg4_inbuf(uint8_t *pData, int iSize)
 {
-  unsigned char* p2ndVop = NULL;
+  unsigned char *p2ndVop = NULL;
+
   if(iSize == 1 && *pData == 0x7f)
     //stuffing bits, spec 14496-2: sec 5.2.3, 5.2.4
     return (uint8_t *)0xfffffffe;
@@ -909,7 +1028,7 @@ uint8_t * CDVDVideoCodecVMETA::digest_mpeg4_inbuf(uint8_t *pData, int iSize)
 }
 
 
-uint8_t * CDVDVideoCodecVMETA::digest_mpeg2_inbuf(uint8_t *pData, int iSize)
+uint8_t *CDVDVideoCodecVMETA::digest_mpeg2_inbuf(uint8_t *pData, int iSize)
 {
   uint8_t *pSeqHead = Seek4bytesCode(pData, iSize, 0x00000100|MPEG2_SCID_SEQ);
 

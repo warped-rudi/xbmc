@@ -26,10 +26,11 @@
 
 #include "DllVMETA.h"
 
-#include <queue>
-#include <vector>
+#include "utils/FastFifo.h"
+#define STREAM_FIFO_SIZE        16      // most efficient, when a power of 2
+#define PICTURE_FIFO_SIZE       32      // most efficient, when a power of 2
 
-#define ALIGN(x, n) (((x) + (n) - 1) & (~((n) - 1)))
+#include <list>
 
 class CBitstreamConverter;
 class DllLibMiscGen;
@@ -44,20 +45,19 @@ public:
   // Required overrides
   bool Open(CDVDStreamInfo &hints, CDVDCodecOptions &options);
   void Dispose(void);
-  IppCodecStatus SendCodecConfig();
-  IppCodecStatus DecodeInternal(uint8_t *pData, unsigned int *iSize, double dts, double pts);
-  int  DecodeInternal(uint8_t *demuxer_content, int demuxer_bytes);
   int  Decode(uint8_t *pData, int iSize, double dts, double pts);
   void Reset(void);
   void SetDropState(bool bDrop);
   bool GetPicture(DVDVideoPicture *pDvdVideoPicture);
-  bool ClearPicture(DVDVideoPicture* pDvdVideoPicture);
-  int  GetFrameCount() { return m_Frames; };
-  const char* GetName() { return m_video_codec_name.c_str(); };
+  bool ClearPicture(DVDVideoPicture *pDvdVideoPicture);
+  const char *GetName() { return m_video_codec_name.c_str(); };
 
 private:
-  uint8_t * digest_mpeg4_inbuf(uint8_t *pData, int iSize);
-  uint8_t * digest_mpeg2_inbuf(uint8_t *pData, int iSize);
+  IppCodecStatus SendCodecConfig();
+  IppCodecStatus DecodeInternal();
+
+  uint8_t *digest_mpeg4_inbuf(uint8_t *pData, int iSize);
+  uint8_t *digest_mpeg2_inbuf(uint8_t *pData, int iSize);
 
 protected:
   // Video format
@@ -67,10 +67,8 @@ protected:
   unsigned int                    m_picture_width;
   unsigned int                    m_picture_height;
   bool                            m_is_open;
-  bool                            m_Pause;
-  bool                            m_setStartTime;
   uint8_t                         *m_extradata;
-  int                             m_extrasize;
+  unsigned int                    m_extrasize;
   CBitstreamConverter             *m_converter;
   bool                            m_video_convert;
   CStdString                      m_video_codec_name;
@@ -80,16 +78,20 @@ protected:
   IppVmetaDecInfo                 m_VDecInfo;
   void                            *m_pDecState;
 
-  std::queue<IppVmetaBitstream*>  m_input_available;
-  std::vector<IppVmetaBitstream*> m_input_buffers;
-  unsigned int                    m_input_size;
+  std::list<IppVmetaBitstream*>   m_input_buffers;
+  std::list<IppVmetaPicture*>     m_output_buffers;
 
-  std::queue<IppVmetaPicture*>    m_output_ready;
-  std::queue<IppVmetaPicture*>    m_output_available;
-  std::vector<IppVmetaPicture*>   m_output_buffers;
-  std::queue<double>              m_pts_queue;
+  FastFiFo<IppVmetaBitstream*, STREAM_FIFO_SIZE> m_input_available;
+  FastFiFo<IppVmetaBitstream*, STREAM_FIFO_SIZE> m_input_ready;
 
-  unsigned int                    m_Frames;
+  FastFiFo<IppVmetaPicture*, PICTURE_FIFO_SIZE>  m_output_available;
+  FastFiFo<IppVmetaPicture*, PICTURE_FIFO_SIZE>  m_output_ready;
+
+  FastFiFo<double, PICTURE_FIFO_SIZE>            m_pts_queue;
+
+  unsigned int                    m_frame_no;
+  unsigned int                    m_numBufSubmitted;
+
   int                             m_itime_inc_bits;
   int                             m_low_delay;
   int                             m_codec_species;
@@ -97,4 +99,5 @@ protected:
   DllLibMiscGen                   *m_DllMiscGen;
   DllLibVMETA                     *m_DllVMETA;
 };
+
 #endif
