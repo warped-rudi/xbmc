@@ -70,9 +70,10 @@ struct DVDVideoPicture
       struct __CVBuffer *cvBufferRef;
     };
   };
+
 #ifdef HAS_MARVELL_DOVE
   struct {
-    void *vmeta;
+    struct _IppVideoPicture *vmeta;
   };
 #endif
 

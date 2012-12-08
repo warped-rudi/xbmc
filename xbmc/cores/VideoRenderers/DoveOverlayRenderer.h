@@ -37,9 +37,6 @@
 class CRenderCapture;
 class CBaseTexture;
 
-#undef ALIGN
-#define ALIGN(value, alignment) (((value)+((alignment)-1))&~((alignment)-1))
-
 #define AUTOSOURCE -1
 
 #define IMAGE_FLAG_WRITING   0x01 /* image is in use after a call to GetImage, caller may be reading or writing */
@@ -123,78 +120,82 @@ extern YUVCOEF yuv_coef_smtp240m;
 
 typedef struct _OutputBuffer
 {
-  IppVmetaPicture *pPicture;
-  bool            bFree;
   unsigned char   *buf[3];
+  IppVmetaPicture *pPicture;
+
   /* Original data from pPicture */
   BYTE* data[4];      // [4] = alpha channel, currently not used
   int iLineSize[4];   // [4] = alpha channel, currently not used
 } OutputBuffer;
 
+#define PICBUF_IMPORTED         0       // owned by decoder (vMeta)
+#define PICBUF_ALLOCATED        1       // owned by renderer
+
 class CDoveOverlayRenderer : public CBaseRenderer
 {
-  public:
-    CDoveOverlayRenderer();
-    virtual ~CDoveOverlayRenderer();
+public:
+  CDoveOverlayRenderer();
+  virtual ~CDoveOverlayRenderer();
 
-    virtual void Update(bool bPauseDrawing);
-    virtual void SetupScreenshot() {};
+  virtual void Update(bool bPauseDrawing);
+  virtual void SetupScreenshot() {};
 
-    bool RenderCapture(CRenderCapture* capture);
+  bool RenderCapture(CRenderCapture* capture);
 
-    void CreateThumbnail(CBaseTexture *texture, unsigned int width, unsigned int height);
+  // Player functions
+  virtual bool Configure(unsigned int width, unsigned int height,
+                         unsigned int d_width, unsigned int d_height,
+                         float fps, unsigned int flags, ERenderFormat format,
+                         unsigned extended_format, unsigned int orientation);
+  virtual bool IsConfigured() { return m_bConfigured; }
+  virtual int          GetImage(YV12Image *image, int source = AUTOSOURCE, bool readonly = false) { return -1; }
+  virtual void         ReleaseImage(int source, bool preserve = false) {};
+  virtual void         FlipPage(int source);
+  virtual unsigned int PreInit();
+  virtual void         UnInit();
+  virtual void         Reset(); /* resets renderer after seek for example */
 
-    // Player functions
-    virtual void ManageDisplay(bool first);
-    virtual bool Configure(unsigned int width, unsigned int height, unsigned int d_width, unsigned int d_height,
-                           float fps, unsigned int flags, ERenderFormat format, unsigned extended_format, unsigned int orientation);
-    virtual bool IsConfigured() { return m_bConfigured; }
-    virtual int          GetImage(YV12Image *image, int source = AUTOSOURCE, bool readonly = false);
-    virtual void         ReleaseImage(int source, bool preserve = false);
-    virtual unsigned int DrawSlice(DVDVideoPicture *pDvdVideoPicture);
-    virtual void         FlipPage(int source);
-    virtual unsigned int PreInit();
-    virtual void         UnInit();
-    virtual void         Reset(); /* resets renderer after seek for example */
+  virtual void RenderUpdate(bool clear, DWORD flags = 0, DWORD alpha = 255);
 
-    virtual void         AddProcessor(YV12Image *image, DVDVideoPicture *pDvdVideoPicture);
+  // Re-implemented CBaseRenderer function(s)
+  virtual bool AddVideoPicture(DVDVideoPicture* picture)
+  {
+    DrawSlice(picture);
+    return true;
+  }
 
-    virtual void RenderUpdate(bool clear, DWORD flags = 0, DWORD alpha = 255);
+  // Feature support
+  virtual bool SupportsMultiPassRendering();
+  virtual bool Supports(ERENDERFEATURE feature);
+  virtual bool Supports(EDEINTERLACEMODE mode);
+  virtual bool Supports(EINTERLACEMETHOD method);
+  virtual bool Supports(ESCALINGMETHOD method);
 
-    // Feature support
-    virtual bool SupportsMultiPassRendering();
-    virtual bool Supports(ERENDERFEATURE feature);
-    virtual bool Supports(EDEINTERLACEMODE mode);
-    virtual bool Supports(EINTERLACEMETHOD method);
-    virtual bool Supports(ESCALINGMETHOD method);
+  virtual EINTERLACEMETHOD AutoInterlaceMethod();
 
-    virtual EINTERLACEMETHOD AutoInterlaceMethod();
+private:
+  void          ManageDisplay(bool first);
+  bool          DrawSlice(DVDVideoPicture *pDvdVideoPicture);
 
-  private:
-    unsigned int NextYV12Image();
-    bool CreateYV12Image(unsigned int index, unsigned int width, unsigned int height);
-    bool FreeYV12Image(unsigned int index);
+  bool          m_bConfigured;
+  unsigned int  m_iFlags;
+  ERenderFormat m_format;
 
-    bool          m_bConfigured;
-    unsigned int  m_iFlags;
-    ERenderFormat m_format;
+  unsigned int  m_currentBuffer;
 
-    YV12Image     m_yuvBuffers[NUM_BUFFERS];
-    unsigned int  m_currentBuffer;
+  // The Overlay handlers
+  int           m_overlayfd;
 
-    // The Overlay handlers
-    int           m_overlayfd;
+  int                       m_enabled;
+  struct _sOvlySurface      m_overlaySurface;
+  struct _sViewPortInfo     m_overlayPlaneInfo;
 
-    int                       m_enabled;
-    struct _sOvlySurface      m_overlaySurface;
-    struct _sViewPortInfo     m_overlayPlaneInfo;
+  DllLibMiscGen             *m_DllMiscGen;
+  DllLibVMETA               *m_DllVMETA;
 
-    DllLibMiscGen             *m_DllMiscGen;
-    DllLibVMETA               *m_DllVMETA;
+  OutputBuffer              m_SoftPicture[NUM_BUFFERS];
 
-    OutputBuffer              m_SoftPicture[NUM_BUFFERS];
-
-    unsigned char             *m_FreeBufAddr[MAX_QUEUE_NUM];
+  unsigned char             *m_FreeBufAddr[MAX_QUEUE_NUM];
 };
 
 inline int NP2( unsigned x )
