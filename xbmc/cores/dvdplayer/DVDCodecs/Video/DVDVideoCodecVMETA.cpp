@@ -744,7 +744,9 @@ bool CDVDVideoCodecVMETA::GetPicture(DVDVideoPicture *pDvdVideoPicture)
     pDvdVideoPicture->iLineSize[2]    = 0;
 
     pDvdVideoPicture->iFlags          = DVP_FLAG_ALLOCATED;
-    pDvdVideoPicture->iFlags         |= m_drop_state ? DVP_FLAG_DROPPED : 0;
+
+    if (m_drop_state || (unsigned)pPicture->pUsrData1 < 2)
+      pDvdVideoPicture->iFlags |= DVP_FLAG_DROPPED;
 
 #ifdef ENABLE_PTS
     if (!m_pts_queue.isEmpty())
