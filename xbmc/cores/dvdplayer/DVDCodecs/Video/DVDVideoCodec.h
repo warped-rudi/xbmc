@@ -69,13 +69,11 @@ struct DVDVideoPicture
     struct {
       struct __CVBuffer *cvBufferRef;
     };
-  };
 
-#ifdef HAS_MARVELL_DOVE
-  struct {
-    struct _IppVideoPicture *vmeta;
+    struct {
+      struct _IppVideoPicture *vmeta;
+    };
   };
-#endif
 
   unsigned int iFlags;
 

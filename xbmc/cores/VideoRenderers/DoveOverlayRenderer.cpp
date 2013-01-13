@@ -49,16 +49,10 @@ CDoveOverlayRenderer::CDoveOverlayRenderer()
 {
   memset(m_SoftPicture, 0, sizeof(OutputBuffer) * NUM_BUFFERS);
 
-  for(int i = 0; i < NUM_BUFFERS; i++)
-  {
-    m_SoftPicture[i].pPicture = (IppVmetaPicture *)malloc(sizeof(IppVmetaPicture));
-
-    if(m_SoftPicture[i].pPicture)
-      memset(m_SoftPicture[i].pPicture, 0, sizeof(IppVmetaPicture));
-  }
-
   m_DllMiscGen        = new DllLibMiscGen();
   m_DllVMETA          = new DllLibVMETA();
+  m_overlayfd         = -1;
+  m_enabled           = 0;
 
   UnInit();
 }
@@ -67,13 +61,6 @@ CDoveOverlayRenderer::CDoveOverlayRenderer()
 CDoveOverlayRenderer::~CDoveOverlayRenderer()
 {
   UnInit();
-
-  for(int i = 0; i < NUM_BUFFERS; i++)
-  {
-    if(m_SoftPicture[i].pPicture)
-      free(m_SoftPicture[i].pPicture);
-    m_SoftPicture[i].pPicture = NULL;
-  }
 
   m_DllVMETA->Unload();
   m_DllMiscGen->Unload();
@@ -106,28 +93,28 @@ void CDoveOverlayRenderer::ManageDisplay(bool first)
 
   OutputBuffer &currPict = m_SoftPicture[m_currentBuffer];
 
-  if (m_format == RENDER_FMT_UYVY422)
-  {
-    m_overlaySurface.videoMode = DOVEFB_VMODE_YUV422PACKED_SWAPYUorV;
-    if (currPict.iLineSize[0])
-      m_overlaySurface.viewPortInfo.ycPitch = currPict.iLineSize[0] * 2;
-    else
-      m_overlaySurface.viewPortInfo.ycPitch = (m_sourceRect.x2 - m_sourceRect.x1) * 2;
-    m_overlaySurface.viewPortInfo.uvPitch = 0;
-  }
-  else if (m_format == RENDER_FMT_YUV420P)
+  if (m_format == RENDER_FMT_YUV420P)
   {
     m_overlaySurface.videoMode = DOVEFB_VMODE_YUV420PLANAR;
-    if (currPict.iLineSize[0])
+    if (currPict.lineSize[0] && currPict.lineSize[1])
     {
-      m_overlaySurface.viewPortInfo.ycPitch = currPict.iLineSize[0];
-      m_overlaySurface.viewPortInfo.uvPitch = currPict.iLineSize[1];
+      m_overlaySurface.viewPortInfo.ycPitch = currPict.lineSize[0];
+      m_overlaySurface.viewPortInfo.uvPitch = currPict.lineSize[1];
     }
     else
     {
       m_overlaySurface.viewPortInfo.ycPitch = m_sourceRect.x2 - m_sourceRect.x1;
       m_overlaySurface.viewPortInfo.uvPitch = (m_sourceRect.x2 - m_sourceRect.x1) / 2;
     }
+  }
+  else /*if (m_format == RENDER_FMT_VMETA || m_format == RENDER_FMT_UYVY422)*/
+  {
+    m_overlaySurface.videoMode = DOVEFB_VMODE_YUV422PACKED_SWAPYUorV;
+    if (currPict.lineSize[0])
+      m_overlaySurface.viewPortInfo.ycPitch = currPict.lineSize[0];
+    else
+      m_overlaySurface.viewPortInfo.ycPitch = (m_sourceRect.x2 - m_sourceRect.x1) * 2;
+    m_overlaySurface.viewPortInfo.uvPitch = 0;
   }
 
   m_overlaySurface.viewPortInfo.srcWidth  = m_sourceRect.x2 - m_sourceRect.x1;
@@ -148,6 +135,13 @@ void CDoveOverlayRenderer::ManageDisplay(bool first)
 
   if (first || memcmp (&tmp_overlaySurface.viewPortInfo, &m_overlaySurface.viewPortInfo, sizeof (struct _sViewPortInfo)))
   {
+    CLog::Log(LOGDEBUG, "m_sourceRect.x1 %f m_sourceRect.x2 %f m_sourceRect.y1 %f m_sourceRect.y2 %f m_sourceFrameRatio %f",
+        m_sourceRect.x1, m_sourceRect.x2, m_sourceRect.y1, m_sourceRect.y2, m_sourceFrameRatio);
+    CLog::Log(LOGDEBUG, "m_destRect.x1 %f m_destRect.x2 %f m_destRect.y1 %f m_destRect.y2 %f",
+        m_destRect.x1, m_destRect.x2, m_destRect.y1, m_destRect.y2);
+    CLog::Log(LOGDEBUG, "%s::%s - Setting ycPitch to %d, uvPitch to %d", CLASSNAME, __func__,
+        m_overlaySurface.viewPortInfo.ycPitch ,m_overlaySurface.viewPortInfo.uvPitch);
+
     if (ioctl(m_overlayfd, DOVEFB_IOCTL_SET_VIEWPORT_INFO, &m_overlaySurface.viewPortInfo) != 0)
     {
       CLog::Log(LOGERROR, "%s::%s - Failed to setup video port", CLASSNAME, __func__);
@@ -168,7 +162,9 @@ bool CDoveOverlayRenderer::Configure(
   unsigned int width, unsigned int height, unsigned int d_width, unsigned int d_height,
   float fps, unsigned int flags, ERenderFormat format, unsigned extended_format, unsigned int orientation)
 {
-  m_bConfigured = false;
+  m_bConfigured   = false;
+  m_enabled       = 0;
+  m_currentBuffer = 0;
 
   memset (&m_overlaySurface, 0, sizeof(m_overlaySurface));
   m_overlaySurface.videoBufferAddr.startAddr = 0;
@@ -176,7 +172,7 @@ bool CDoveOverlayRenderer::Configure(
   m_overlaySurface.videoBufferAddr.inputData = 0;
   m_overlaySurface.videoBufferAddr.frameID = 0;
 
-  if (format != RENDER_FMT_UYVY422 && format != RENDER_FMT_YUV420P)
+  if (format != RENDER_FMT_VMETA && format != RENDER_FMT_UYVY422 && format != RENDER_FMT_YUV420P)
   {
     CLog::Log(LOGERROR, "%s::%s - Unknown format 0x%x", CLASSNAME, __func__, format);
 
@@ -202,28 +198,14 @@ bool CDoveOverlayRenderer::Configure(
     return false;
   }
 
-  ManageDisplay(true);
-
-  CLog::Log(LOGDEBUG, "%s::%s - Setting ycPitch to %d, uvPitch to %d", CLASSNAME, __func__,
-      m_overlaySurface.viewPortInfo.ycPitch ,m_overlaySurface.viewPortInfo.uvPitch);
-
-  CLog::Log(LOGDEBUG, "m_sourceRect.x1 %f m_sourceRect.x2 %f m_sourceRect.y1 %f m_sourceRect.y2 %f m_sourceFrameRatio %f",
-      m_sourceRect.x1, m_sourceRect.x2, m_sourceRect.y1, m_sourceRect.y2, m_sourceFrameRatio);
-  CLog::Log(LOGDEBUG, "m_destRect.x1 %f m_destRect.x2 %f m_destRect.y1 %f m_destRect.y2 %f",
-      m_destRect.x1, m_destRect.x2, m_destRect.y1, m_destRect.y2);
-
-  m_enabled = 0;
-
   int srcMode = SHM_NORMAL;
-
   if (ioctl(m_overlayfd, DOVEFB_IOCTL_SET_SRC_MODE, &srcMode) == -1)
   {
-    CLog::Log(LOGERROR, "%s::%s - Failed to enable video overlay", CLASSNAME, __func__);
+    CLog::Log(LOGERROR, "%s::%s - Failed set source mode", CLASSNAME, __func__);
     return false;
   }
 
   int interpolation = 3; // bi-linear interpolation
-
   if (ioctl(m_overlayfd, DOVEFB_IOCTL_SET_INTERPOLATION_MODE, &interpolation) != 0)
   {
     CLog::Log(LOGERROR, "%s::%s - Failed to setup video interpolation mode", CLASSNAME, __func__);
@@ -254,11 +236,9 @@ bool CDoveOverlayRenderer::Configure(
     return false;
   }
 
-  m_currentBuffer = 0;
-  m_bConfigured   = true;
-
   CLog::Log(LOGDEBUG, "%s::%s - Proper format, continuing", CLASSNAME, __func__);
 
+  m_bConfigured = true;
   return m_bConfigured;
 }
 
@@ -270,8 +250,6 @@ unsigned int CDoveOverlayRenderer::PreInit()
 
   UnInit();
 
-  m_currentBuffer = 0;
-
   m_resolution = g_guiSettings.m_LookAndFeelResolution;
   if ( m_resolution == RES_WINDOW )
     m_resolution = RES_DESKTOP;
@@ -282,26 +260,26 @@ unsigned int CDoveOverlayRenderer::PreInit()
 
 void CDoveOverlayRenderer::FlipPage(int source)
 {
+  bool next_frame_present = false;
+  OutputBuffer &currPict = m_SoftPicture[m_currentBuffer];
+
   if (!m_bConfigured)
     return;
 
-  ManageDisplay(false);
+  ManageDisplay(m_enabled);
 
-  unsigned phy_addr[3];
-  bool next_frame_present = false;
-  OutputBuffer &currPict = m_SoftPicture[m_currentBuffer];
-  IppVmetaPicture *pPicture = currPict.pPicture;
-
-  struct shm_private_info info;
-  info.method = SHM_VMETA;
-  ioctl(m_overlayfd, DOVEFB_IOCTL_SET_SRC_MODE, &info.method);
+  if (m_enabled == 0)
+  {
+    int srcMode = SHM_VMETA;
+    ioctl(m_overlayfd, DOVEFB_IOCTL_SET_SRC_MODE, &srcMode);
+  }
 
   m_overlaySurface.videoBufferAddr.frameID = 0;
 
-  if(pPicture && pPicture->nPhyAddr)
+  if (currPict.phyBuf[0])
   {
-    m_overlaySurface.videoBufferAddr.startAddr = (unsigned char *)pPicture->nPhyAddr;
-    m_overlaySurface.videoBufferAddr.length    = pPicture->nBufSize;
+    m_overlaySurface.videoBufferAddr.startAddr = (unsigned char *)currPict.phyBuf[0];
+    m_overlaySurface.videoBufferAddr.length    = currPict.nBufSize;
   }
   else
   {
@@ -309,27 +287,14 @@ void CDoveOverlayRenderer::FlipPage(int source)
     m_overlaySurface.videoBufferAddr.length    = 0;
   }
 
-  //ioctl by Solid-Run not in marvel kernel
-  if (m_format == RENDER_FMT_UYVY422) /* Typically frames from vMeta */
+  if (m_format == RENDER_FMT_VMETA || m_format == RENDER_FMT_UYVY422 || m_format == RENDER_FMT_YUV420P)
   {
-    phy_addr[0] = (unsigned int) currPict.buf[0];
-    phy_addr[1] = (unsigned int) currPict.buf[0];
-    phy_addr[2] = (unsigned int) currPict.buf[0];
-    next_frame_present = true;
-    if(ioctl(m_overlayfd, DOVEFB_IOCTL_NEXT_FRAME_PRESENT, &phy_addr) != 0)
+    //ioctl by Solid-Run not in marvel kernel
+    if(ioctl(m_overlayfd, DOVEFB_IOCTL_NEXT_FRAME_PRESENT, currPict.phyBuf) != 0)
       CLog::Log(LOGERROR, "%s::%s - Error flipping", CLASSNAME, __func__);
-  }
-  else if (m_format == RENDER_FMT_YUV420P)
-  {
-    phy_addr[0] = (unsigned int) currPict.buf[0];
-    phy_addr[1] = (unsigned int) currPict.buf[1];
-    phy_addr[2] = (unsigned int) currPict.buf[2];
     next_frame_present = true;
-    if(ioctl(m_overlayfd, DOVEFB_IOCTL_NEXT_FRAME_PRESENT, &phy_addr) != 0)
-      CLog::Log(LOGERROR, "%s::%s - Error flipping", CLASSNAME, __func__);
-
   }
-  else if(ioctl(m_overlayfd, DOVEFB_IOCTL_FLIP_VID_BUFFER, &m_overlaySurface) != 0)
+  else if (ioctl(m_overlayfd, DOVEFB_IOCTL_FLIP_VID_BUFFER, &m_overlaySurface) != 0)
   {
       CLog::Log(LOGERROR, "%s::%s - Error flipping", CLASSNAME, __func__);
   }
@@ -364,7 +329,7 @@ void CDoveOverlayRenderer::Reset()
 }
 
 
-void CDoveOverlayRenderer::Update(bool bPauseDrawing)
+void CDoveOverlayRenderer::Update(bool /*bPauseDrawing*/)
 {
   if (!m_bConfigured)
     return;
@@ -395,93 +360,84 @@ bool CDoveOverlayRenderer::RenderCapture(CRenderCapture* capture)
 
 bool CDoveOverlayRenderer::DrawSlice(DVDVideoPicture *pDvdVideoPicture)
 {
-  OutputBuffer    &currPict = m_SoftPicture[m_currentBuffer];
-  IppVmetaPicture *pPicture = currPict.pPicture;
+  OutputBuffer &currPict = m_SoftPicture[m_currentBuffer];
 
-  if(!pPicture)
-    return false;
-
-  // Save the original data buffers and pitch
-  currPict.data[0] = pDvdVideoPicture->data[0];
-  currPict.data[1] = pDvdVideoPicture->data[1];
-  currPict.data[2] = pDvdVideoPicture->data[2];
-  currPict.data[3] = pDvdVideoPicture->data[3];
-  currPict.iLineSize[0] = pDvdVideoPicture->iLineSize[0];
-  currPict.iLineSize[1] = pDvdVideoPicture->iLineSize[1];
-  currPict.iLineSize[2] = pDvdVideoPicture->iLineSize[2];
-  currPict.iLineSize[3] = pDvdVideoPicture->iLineSize[3];
-
-  // from vMeta ?
-  if(pDvdVideoPicture->vmeta)
-  {
-    if(m_format != RENDER_FMT_UYVY422)
+  if (pDvdVideoPicture->format != m_format)
       return false;
 
+  // from vMeta ?
+  if (m_format == RENDER_FMT_VMETA)
+  {
     // switched from other format...
-    if(pPicture->nFlag == PICBUF_ALLOCATED)
-      m_DllVMETA->vdec_os_api_dma_free(pPicture->pBuf);
+    if(currPict.nFlag & PBF_ALLOCATED)
+      m_DllVMETA->vdec_os_api_dma_free(currPict.pBuf);
 
     // Decoder allocated buffer
-    pPicture->nPhyAddr = pDvdVideoPicture->vmeta->nPhyAddr;
-    pPicture->nBufSize = pDvdVideoPicture->vmeta->nBufSize;
-    pPicture->pBuf     = pDvdVideoPicture->vmeta->pBuf;
-    pPicture->nFlag    = PICBUF_IMPORTED;
+    currPict.nFlag       = PBF_IMPORTED;
+    currPict.pBuf        = pDvdVideoPicture->vmeta->pBuf;
+    currPict.nBufSize    = pDvdVideoPicture->vmeta->nBufSize;
+    currPict.phyBuf[0]   = pDvdVideoPicture->vmeta->nPhyAddr;
+    currPict.lineSize[0] = pDvdVideoPicture->vmeta->pic.picPlaneStep[0];
 
-    currPict.buf[0] = (unsigned char *)pPicture->nPhyAddr;
-    currPict.buf[1] = (unsigned char *)pPicture->nPhyAddr +
-      (pDvdVideoPicture->iLineSize[0] * pDvdVideoPicture->iHeight);
-    currPict.buf[2] = (unsigned char *)pPicture->nPhyAddr +
-      (pDvdVideoPicture->iLineSize[0] * pDvdVideoPicture->iHeight) +
-      (pDvdVideoPicture->iLineSize[1] * pDvdVideoPicture->iHeight / 2);
+    currPict.phyBuf[1]   = currPict.phyBuf[2] = 0;
+    currPict.lineSize[1] = currPict.lineSize[2] = 0;
   }
   else
   {
-    if(m_format != RENDER_FMT_YUV420P)
-      return false;
+    unsigned int nBufSize = pDvdVideoPicture->iLineSize[0] * pDvdVideoPicture->iHeight;
 
     // Software decoding. Allocate buffer for ouput
-    unsigned int memSize = (pDvdVideoPicture->iLineSize[0] * pDvdVideoPicture->iHeight) +
-                           (pDvdVideoPicture->iLineSize[1] * pDvdVideoPicture->iHeight / 2) +
-                           (pDvdVideoPicture->iLineSize[2] * pDvdVideoPicture->iHeight / 2);
+    if (m_format == RENDER_FMT_YUV420P)
+    {
+      nBufSize += (pDvdVideoPicture->iLineSize[1] * pDvdVideoPicture->iHeight / 2) +
+                  (pDvdVideoPicture->iLineSize[2] * pDvdVideoPicture->iHeight / 2);
+    }
+    else if (m_format != RENDER_FMT_UYVY422)
+    {
+      return false;
+    }
 
     // Check for size change ...
-    if(pPicture->nFlag == PICBUF_ALLOCATED && pPicture->nBufSize < memSize)
+    if((currPict.nFlag & PBF_ALLOCATED) && currPict.nBufSize < nBufSize)
     {
-      m_DllVMETA->vdec_os_api_dma_free(pPicture->pBuf);
-      pPicture->nFlag = PICBUF_IMPORTED;
+      m_DllVMETA->vdec_os_api_dma_free(currPict.pBuf);
+      currPict.nFlag = PBF_UNUSED;
     }
 
     // Allocate, if necessary
-    if(pPicture->nFlag != PICBUF_ALLOCATED)
+    if(!(currPict.nFlag & PBF_ALLOCATED))
     {
-      pPicture->pBuf = (Ipp8u*)m_DllVMETA->vdec_os_api_dma_alloc_cached(
-                                    memSize, VMETA_DIS_BUF_ALIGN, &(pPicture->nPhyAddr));
-      pPicture->nBufSize = memSize;
-      pPicture->nFlag    = PICBUF_ALLOCATED;
+      currPict.pBuf = (Ipp8u*)m_DllVMETA->vdec_os_api_dma_alloc_cached(
+                                nBufSize, VMETA_DIS_BUF_ALIGN, &currPict.phyBuf[0]);
+      currPict.nBufSize = nBufSize;
+      currPict.nFlag    = PBF_ALLOCATED;
     }
 
-    if(!pPicture->pBuf)
+    if(!currPict.pBuf)
     {
-      pPicture->nBufSize = 0;
-      pPicture->nPhyAddr = 0;
-      pPicture->nFlag    = PICBUF_IMPORTED;
+      currPict.nFlag    = PBF_UNUSED;
       CLog::Log(LOGERROR, "%s::%s - Failed to alloc memory", CLASSNAME, __func__);
       return false;
     }
 
-    currPict.buf[0] = (unsigned char *)pPicture->nPhyAddr;
-    currPict.buf[1] = (unsigned char *)pPicture->nPhyAddr +
-      (pDvdVideoPicture->iLineSize[0] * pDvdVideoPicture->iHeight);
-    currPict.buf[2] = (unsigned char *)pPicture->nPhyAddr +
-      (pDvdVideoPicture->iLineSize[0] * pDvdVideoPicture->iHeight) +
-      (pDvdVideoPicture->iLineSize[1] * pDvdVideoPicture->iHeight / 2);
-
-    unsigned char *dst = pPicture->pBuf;
+    unsigned char *dst = currPict.pBuf;
     memcpy( dst, pDvdVideoPicture->data[0], pDvdVideoPicture->iLineSize[0] * pDvdVideoPicture->iHeight );
-    dst += pDvdVideoPicture->iLineSize[0] * pDvdVideoPicture->iHeight;
-    memcpy( dst, pDvdVideoPicture->data[1], pDvdVideoPicture->iLineSize[1] * pDvdVideoPicture->iHeight / 2 );
-    dst += pDvdVideoPicture->iLineSize[1] * pDvdVideoPicture->iHeight / 2;
-    memcpy( dst, pDvdVideoPicture->data[2], pDvdVideoPicture->iLineSize[2] * pDvdVideoPicture->iHeight / 2 );
+
+    if (m_format == RENDER_FMT_YUV420P)
+    {
+      currPict.phyBuf[1] = currPict.phyBuf[0] + (pDvdVideoPicture->iLineSize[0] * pDvdVideoPicture->iHeight);
+      currPict.phyBuf[2] = currPict.phyBuf[1] + (pDvdVideoPicture->iLineSize[1] * pDvdVideoPicture->iHeight / 2);
+
+      dst += pDvdVideoPicture->iLineSize[0] * pDvdVideoPicture->iHeight;
+      memcpy( dst, pDvdVideoPicture->data[1], pDvdVideoPicture->iLineSize[1] * pDvdVideoPicture->iHeight / 2 );
+
+      dst += pDvdVideoPicture->iLineSize[1] * pDvdVideoPicture->iHeight / 2;
+      memcpy( dst, pDvdVideoPicture->data[2], pDvdVideoPicture->iLineSize[2] * pDvdVideoPicture->iHeight / 2 );
+    }
+    else
+    {
+      currPict.phyBuf[1] = currPict.phyBuf[2] = 0;
+    }
   }
 
   return true;
@@ -492,44 +448,39 @@ void CDoveOverlayRenderer::UnInit()
 {
   CLog::Log(LOGDEBUG, "%s::%s", CLASSNAME, __func__);
 
-  memset(m_FreeBufAddr, 0, MAX_QUEUE_NUM * sizeof(unsigned char*));
+  memset(m_FreeBufAddr, 0, MAX_QUEUE_NUM * sizeof(m_FreeBufAddr[0]));
+
   if(m_overlayfd != -1)
+  {
     ioctl(m_overlayfd, DOVEFB_IOCTL_GET_FREELIST, &m_FreeBufAddr);
 
-  if(m_enabled)
-  {
-    m_enabled = 0;
+    if(m_enabled)
+    {
+      m_enabled = 0;
 
-    if (ioctl(m_overlayfd, DOVEFB_IOCTL_WAIT_VSYNC, 0) != 0)
-      CLog::Log(LOGERROR, "%s::%s - Error waiting for vsync", CLASSNAME, __func__);
+      if (ioctl(m_overlayfd, DOVEFB_IOCTL_WAIT_VSYNC, 0) != 0)
+        CLog::Log(LOGERROR, "%s::%s - Error waiting for vsync", CLASSNAME, __func__);
 
-    if(ioctl(m_overlayfd, DOVEFB_IOCTL_SWITCH_VID_OVLY, &m_enabled) == -1)
-      CLog::Log(LOGERROR, "%s::%s Failed to disable video overlay", CLASSNAME, __func__);
-  }
+      if(ioctl(m_overlayfd, DOVEFB_IOCTL_SWITCH_VID_OVLY, &m_enabled) == -1)
+        CLog::Log(LOGERROR, "%s::%s Failed to disable video overlay", CLASSNAME, __func__);
+    }
 
-  if (m_overlayfd != -1)
     close(m_overlayfd);
+    m_overlayfd = -1;
+  }
 
   for(int i = 0; i < NUM_BUFFERS; i++)
   {
-    IppVmetaPicture *pPicture = m_SoftPicture[i].pPicture;
+    OutputBuffer &currPict = m_SoftPicture[i];
 
-    if(pPicture)
-    {
-      if(pPicture->nFlag == PICBUF_ALLOCATED)
-        m_DllVMETA->vdec_os_api_dma_free(pPicture->pBuf);
-
-      pPicture->pBuf     = NULL;
-      pPicture->nPhyAddr = 0;
-      pPicture->nBufSize = 0;
-      pPicture->nFlag    = PICBUF_IMPORTED;
-    }
+    if(currPict.nFlag & PBF_ALLOCATED)
+      m_DllVMETA->vdec_os_api_dma_free(currPict.pBuf);
   }
+  memset(m_SoftPicture, 0, sizeof(OutputBuffer) * NUM_BUFFERS);
 
+  m_bConfigured             = false;
   m_currentBuffer           = 0;
   m_iFlags                  = 0;
-  m_bConfigured             = false;
-  m_overlayfd               = -1;
   m_sourceWidth             = 0;
   m_sourceHeight            = 0;
 

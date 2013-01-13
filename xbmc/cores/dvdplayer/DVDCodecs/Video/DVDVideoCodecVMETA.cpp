@@ -723,8 +723,6 @@ bool CDVDVideoCodecVMETA::GetPicture(DVDVideoPicture *pDvdVideoPicture)
 
   pDvdVideoPicture->dts             = DVD_NOPTS_VALUE;
   pDvdVideoPicture->pts             = DVD_NOPTS_VALUE;
-  pDvdVideoPicture->format          = RENDER_FMT_UYVY422;
-
   pDvdVideoPicture->iDisplayWidth   = m_decoded_width;
   pDvdVideoPicture->iDisplayHeight  = m_decoded_height;
   pDvdVideoPicture->iWidth          = m_picture_width;
@@ -733,17 +731,9 @@ bool CDVDVideoCodecVMETA::GetPicture(DVDVideoPicture *pDvdVideoPicture)
   if (m_output_ready.getHead(pPicture))
   {
     // clone the video picture buffer settings.
-    pDvdVideoPicture->vmeta           = pPicture;
-    pDvdVideoPicture->data[0]         = (Ipp8u *)(pPicture->pic.ppPicPlane[0]) +
-                                        (pPicture->pic.picROI.y * pPicture->pic.picPlaneStep[0]) +
-                                        (pPicture->pic.picROI.x << 1);
-    pDvdVideoPicture->iLineSize[0]    = ALIGN_SIZE(pPicture->pic.picWidth, 4);
-    pDvdVideoPicture->data[1]         = 0;      // not needed in UYVY
-    pDvdVideoPicture->iLineSize[1]    = 0;
-    pDvdVideoPicture->data[2]         = 0;      // not needed in UYVY
-    pDvdVideoPicture->iLineSize[2]    = 0;
-
-    pDvdVideoPicture->iFlags          = DVP_FLAG_ALLOCATED;
+    pDvdVideoPicture->vmeta         = pPicture;
+    pDvdVideoPicture->format        = RENDER_FMT_VMETA;
+    pDvdVideoPicture->iFlags        = DVP_FLAG_ALLOCATED;
 
     if (m_drop_state || (unsigned)pPicture->pUsrData1 < 2)
       pDvdVideoPicture->iFlags |= DVP_FLAG_DROPPED;
@@ -753,26 +743,12 @@ bool CDVDVideoCodecVMETA::GetPicture(DVDVideoPicture *pDvdVideoPicture)
       m_pts_queue.getHead(pDvdVideoPicture->pts);
 #endif
 
-    /*
-    printf("%d : pic width [%dx%d] [%d:%d:%d] [0x%08x:0x%08x:0x%08x] %f\n",
-           (unsigned int)pPicture->pUsrData1 , pDvdVideoPicture->iDisplayWidth, pDvdVideoPicture->iDisplayHeight,
-           pDvdVideoPicture->iLineSize[0], pDvdVideoPicture->iLineSize[1], pDvdVideoPicture->iLineSize[2],
-           (unsigned int)pDvdVideoPicture->data[0], (unsigned int)pDvdVideoPicture->data[1],
-           (unsigned int)pDvdVideoPicture->data[2], (double)pDvdVideoPicture->pts / (double)DVD_TIME_BASE);
-    */
-
     return true;
   }
 
   pDvdVideoPicture->vmeta           = 0;
-  pDvdVideoPicture->iFlags          = 0; //DVP_FLAG_DROPPED;
-
-  pDvdVideoPicture->data[0]         = 0;
-  pDvdVideoPicture->iLineSize[0]    = 0;
-  pDvdVideoPicture->data[1]         = 0;
-  pDvdVideoPicture->iLineSize[1]    = 0;
-  pDvdVideoPicture->data[2]         = 0;
-  pDvdVideoPicture->iLineSize[2]    = 0;
+  pDvdVideoPicture->iFlags          = 0;
+  pDvdVideoPicture->format          = RENDER_FMT_NONE;
 
   return false;
 }
@@ -782,7 +758,7 @@ bool CDVDVideoCodecVMETA::ClearPicture(DVDVideoPicture *pDvdVideoPicture)
 {
   // release any previous retained image buffer ref that
   // has not been passed up to renderer (ie. dropped frames, etc).
-  if (pDvdVideoPicture->vmeta)
+  if (pDvdVideoPicture->format == RENDER_FMT_VMETA)
     m_output_available.putTail(pDvdVideoPicture->vmeta);
 
   memset(pDvdVideoPicture, 0, sizeof(DVDVideoPicture));

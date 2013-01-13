@@ -120,16 +120,17 @@ extern YUVCOEF yuv_coef_smtp240m;
 
 typedef struct _OutputBuffer
 {
-  unsigned char   *buf[3];
-  IppVmetaPicture *pPicture;
+  unsigned      nFlag;          // see PBF_xxx
+  unsigned char *pBuf;
+  unsigned      nBufSize;
 
-  /* Original data from pPicture */
-  BYTE* data[4];      // [4] = alpha channel, currently not used
-  int iLineSize[4];   // [4] = alpha channel, currently not used
+  unsigned      phyBuf[3];
+  unsigned      lineSize[3];
 } OutputBuffer;
 
-#define PICBUF_IMPORTED         0       // owned by decoder (vMeta)
-#define PICBUF_ALLOCATED        1       // owned by renderer
+#define PBF_UNUSED      0x00    // empty
+#define PBF_IMPORTED    0x01    // owned by decoder (vMeta)
+#define PBF_ALLOCATED   0x02    // owned by renderer
 
 class CDoveOverlayRenderer : public CBaseRenderer
 {
@@ -177,25 +178,21 @@ private:
   void          ManageDisplay(bool first);
   bool          DrawSlice(DVDVideoPicture *pDvdVideoPicture);
 
-  bool          m_bConfigured;
-  unsigned int  m_iFlags;
-  ERenderFormat m_format;
+  bool                  m_bConfigured;
+  ERenderFormat         m_format;
 
-  unsigned int  m_currentBuffer;
+  int                   m_overlayfd;
+  int                   m_enabled;
+  struct _sOvlySurface  m_overlaySurface;
+  struct _sViewPortInfo m_overlayPlaneInfo;
 
-  // The Overlay handlers
-  int           m_overlayfd;
+  DllLibMiscGen         *m_DllMiscGen;
+  DllLibVMETA           *m_DllVMETA;
 
-  int                       m_enabled;
-  struct _sOvlySurface      m_overlaySurface;
-  struct _sViewPortInfo     m_overlayPlaneInfo;
+  unsigned int          m_currentBuffer;
+  OutputBuffer          m_SoftPicture[NUM_BUFFERS];
 
-  DllLibMiscGen             *m_DllMiscGen;
-  DllLibVMETA               *m_DllVMETA;
-
-  OutputBuffer              m_SoftPicture[NUM_BUFFERS];
-
-  unsigned char             *m_FreeBufAddr[MAX_QUEUE_NUM];
+  unsigned char         *m_FreeBufAddr[MAX_QUEUE_NUM];
 };
 
 inline int NP2( unsigned x )
