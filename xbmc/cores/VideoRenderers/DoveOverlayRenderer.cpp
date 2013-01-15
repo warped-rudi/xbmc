@@ -205,11 +205,16 @@ bool CDoveOverlayRenderer::Configure(
     return false;
   }
 
-  int interpolation = 3; // bi-linear interpolation
-  if (ioctl(m_overlayfd, DOVEFB_IOCTL_SET_INTERPOLATION_MODE, &interpolation) != 0)
+  GRAPHICS_SCALING scale = (GRAPHICS_SCALING) g_guiSettings.GetInt("videoscreen.graphics_scaling");
+  if (scale == -1) scale=GR_SCALE_100;
+  if (scale == GR_SCALE_100) /* Scaler is set differently when using graphics scaler */
   {
-    CLog::Log(LOGERROR, "%s::%s - Failed to setup video interpolation mode", CLASSNAME, __func__);
-    return false;
+    int interpolation = 3; // bi-linear interpolation
+    if (ioctl(m_overlayfd, DOVEFB_IOCTL_SET_INTERPOLATION_MODE, &interpolation) != 0)
+    {
+      CLog::Log(LOGERROR, "%s::%s - Failed to setup video interpolation mode", CLASSNAME, __func__);
+      return false;
+    }
   }
 
   struct _sColorKeyNAlpha alpha;

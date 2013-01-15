@@ -26,6 +26,11 @@
 #include <sys/wait.h>
 #include "system.h"
 #include "PlatformInclude.h"
+#ifdef TARGET_MARVELL_DOVE
+#include <sys/mman.h>
+#include "guilib/Resolution.h"
+#include "settings/GUISettings.h"
+#endif
 #include "utils/XBMCTinyXML.h"
 #include "../xbmc/utils/log.h"
 
@@ -158,8 +163,44 @@ void CXRandR::RestoreState()
   }
 }
 
+#ifdef TARGET_MARVELL_DOVE
+#define MAP_SIZE 4096UL
+#define MAP_MASK (MAP_SIZE - 1)
+void CXRandR::ChangeGraphicsScaler(void)
+{
+  /* OK. Now this is a seriously ugly hack. Code needs to be re-written to support ioctl to driver !!! */
+  /* Code below originally from devmem2.c */
+  int fd;
+  off_t target_page = 0xf1820000; /* LCD Controller base address */
+  void *map_base;
+  unsigned int zoomed;
+  unsigned int gr_size;
+  int zx,zy;
+  GRAPHICS_SCALING scale = (GRAPHICS_SCALING) g_guiSettings.GetInt("videoscreen.graphics_scaling");
+  if (scale == -1) scale=GR_SCALE_100;
+  if((fd = open("/dev/mem", O_RDWR | O_SYNC)) == -1) {
+        CLog::Log(LOGERROR, "XRANDR: Unable to open /dev/mem");
+	return;
+  }
+  fflush(stdout);
+  map_base = mmap(0, MAP_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, fd, target_page);
+  zoomed = * (unsigned int *) (map_base + 0x108);
+  zx = zoomed & 0xffff;
+  zy = (zoomed & 0xffff0000) >> 16;
+  CLog::Log(LOGINFO, "XRANDR: Zoomed area is %dx%d, new area should be %dx%d\n",zx,zy,zx*100/scale,zy*100/scale);
+  gr_size = (zy*100/scale) & 0xffff;
+  gr_size = (gr_size << 16) | ((zx*100/scale) & 0xffff);
+  * (unsigned int *) (map_base + 0x104) = gr_size;
+  close(fd);
+}
+#endif
+
 bool CXRandR::SetMode(XOutput output, XMode mode)
 {
+#ifdef TARGET_MARVELL_DOVE
+  /* Required both on entrance and exit from SetMode. First entrance is required to get the scaler modified */
+  ChangeGraphicsScaler ();
+#endif
   if ((output.name == m_currentOutput && mode.id == m_currentMode) || (output.name == "" && mode.id == ""))
     return true;
 
@@ -256,6 +297,9 @@ bool CXRandR::SetMode(XOutput output, XMode mode)
   if (WEXITSTATUS(status) != 0)
     return false;
 
+#ifdef TARGET_MARVELL_DOVE
+  ChangeGraphicsScaler ();
+#endif
   return true;
 }
 

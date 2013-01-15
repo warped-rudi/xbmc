@@ -626,6 +626,19 @@ void CGraphicContext::SetScalingResolution(const RESOLUTION_INFO &res, bool need
     float fToWidth;
     float fToHeight;
 
+#ifdef HAS_MARVELL_DOVE
+    GRAPHICS_SCALING scale = (GRAPHICS_SCALING) g_guiSettings.GetInt("videoscreen.graphics_scaling");
+    if (scale == -1) /* not configured */
+      scale = GR_SCALE_100;
+    {
+      fFromWidth = (float)res.iWidth;
+      fFromHeight = (float)res.iHeight;
+      fToPosX = (float)g_settings.m_ResInfo[m_Resolution].Overscan.left*100/scale;
+      fToPosY = (float)g_settings.m_ResInfo[m_Resolution].Overscan.top*100/scale;
+      fToWidth = (float)g_settings.m_ResInfo[m_Resolution].Overscan.right*100/scale - fToPosX;
+      fToHeight = (float)g_settings.m_ResInfo[m_Resolution].Overscan.bottom*100/scale - fToPosY;
+    }
+#else
     {
       fFromWidth = (float)res.iWidth;
       fFromHeight = (float)res.iHeight;
@@ -634,6 +647,7 @@ void CGraphicContext::SetScalingResolution(const RESOLUTION_INFO &res, bool need
       fToWidth = (float)g_settings.m_ResInfo[m_Resolution].Overscan.right - fToPosX;
       fToHeight = (float)g_settings.m_ResInfo[m_Resolution].Overscan.bottom - fToPosY;
     }
+#endif
 
     if(!g_guiSkinzoom) // lookup gui setting if we didn't have it already
       g_guiSkinzoom = (CSettingInt*)g_guiSettings.GetSetting("lookandfeel.skinzoom");

@@ -100,6 +100,9 @@ public:
   void LoadCustomModeLinesToAllOutputs(void);
   void SaveState();
   void RestoreState();
+#ifdef TARGET_MARVELL_DOVE
+  void ChangeGraphicsScaler(void);
+#endif
   //bool Has1080i();
   //bool Has1080p();
   //bool Has720p();

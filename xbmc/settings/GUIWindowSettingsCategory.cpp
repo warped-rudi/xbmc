@@ -1490,6 +1490,11 @@ void CGUIWindowSettingsCategory::OnSettingChanged(BaseSettingControlPtr pSetting
       CLog::Log(LOGERROR, "Unable to open vmeta clock settings file on sysfs");
     fclose(Fh);
   }
+  else if (strSetting.Equals("videoscreen.graphics_scaling"))
+  {
+    /* Fake as resolution changed - this to refresh aspect ratios of fonts vs. graphics */
+    g_graphicsContext.SetVideoResolution(g_graphicsContext.GetVideoResolution(), true);
+  }
 #endif
   else if (strSetting.Equals("videoscreen.vsync"))
   {

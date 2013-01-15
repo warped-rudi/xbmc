@@ -1084,6 +1084,11 @@ void CGUIWindowFullScreen::RenderTTFSubtitles()
     CStdString subtitleText = "How now brown cow";
     if (g_application.m_pPlayer->GetCurrentSubtitle(subtitleText))
     {
+#ifdef HAS_MARVELL_DOVE
+      GRAPHICS_SCALING scale = (GRAPHICS_SCALING) g_guiSettings.GetInt("videoscreen.graphics_scaling");
+      if (scale == -1) /* not configured */
+        scale = GR_SCALE_100;
+#endif
       // Remove HTML-like tags from the subtitles until
       subtitleText.Replace("\\r", "");
       subtitleText.Replace("\r", "");
@@ -1107,7 +1112,11 @@ void CGUIWindowFullScreen::RenderTTFSubtitles()
       RESOLUTION res = g_graphicsContext.GetVideoResolution();
       g_graphicsContext.SetRenderingResolution(g_graphicsContext.GetResInfo(), false);
 
+#ifdef HAS_MARVELL_DOVE
+      float maxWidth = (float) g_settings.m_ResInfo[res].Overscan.right*100/scale - g_settings.m_ResInfo[res].Overscan.left;
+#else
       float maxWidth = (float) g_settings.m_ResInfo[res].Overscan.right - g_settings.m_ResInfo[res].Overscan.left;
+#endif
       m_subsLayout->Update(subtitleText, maxWidth * 0.9f, false, true); // true to force LTR reading order (most Hebrew subs are this format)
 
       int subalign = g_guiSettings.GetInt("subtitles.align");
@@ -1117,7 +1126,11 @@ void CGUIWindowFullScreen::RenderTTFSubtitles()
       float y = (float) g_settings.m_ResInfo[res].iSubtitles;
 
       if (subalign == SUBTITLE_ALIGN_MANUAL)
+#ifdef HAS_MARVELL_DOVE
+        y = (float) g_settings.m_ResInfo[res].iSubtitles*100/scale - textHeight;
+#else
         y = (float) g_settings.m_ResInfo[res].iSubtitles - textHeight;
+#endif
       else
       {
         CRect SrcRect, DestRect;
@@ -1135,7 +1148,11 @@ void CGUIWindowFullScreen::RenderTTFSubtitles()
           y += g_graphicsContext.GetHeight() - g_settings.m_ResInfo[res].iSubtitles;
 
         y = std::max(y, (float) g_settings.m_ResInfo[res].Overscan.top);
+#ifdef HAS_MARVELL_DOVE
+        y = std::min(y, g_settings.m_ResInfo[res].Overscan.bottom*100/scale - textHeight);
+#else
         y = std::min(y, g_settings.m_ResInfo[res].Overscan.bottom - textHeight);
+#endif
       }
 
       m_subsLayout->RenderOutline(x, y, 0, 0xFF000000, XBFONT_CENTER_X, maxWidth);

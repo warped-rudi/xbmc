@@ -440,6 +440,13 @@ void CGUISettings::Initialize()
   vmeta_clk.insert(make_pair(37001,VMETA_CLK_500));
   vmeta_clk.insert(make_pair(37002,VMETA_CLK_667));
   AddInt(vs, "videoscreen.vmeta_clk", 37000, VMETA_CLK_667, vmeta_clk, SPIN_CONTROL_TEXT);
+
+  map<int,int> graphics_scaling;
+  graphics_scaling.insert(make_pair(37011,GR_SCALE_100));
+  graphics_scaling.insert(make_pair(37012,GR_SCALE_150));
+  graphics_scaling.insert(make_pair(37013,GR_SCALE_200));
+  graphics_scaling.insert(make_pair(37014,GR_SCALE_250));
+  AddInt(vs, "videoscreen.graphics_scaling", 37010, GR_SCALE_150, graphics_scaling, SPIN_CONTROL_TEXT);
 #endif
   map<int,int> vsync;
 #if defined(_LINUX) && !defined(TARGET_DARWIN)
