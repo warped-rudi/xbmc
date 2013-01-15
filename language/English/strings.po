@@ -11432,3 +11432,23 @@ msgstr ""
 msgctxt "#37002"
 msgid "667 MHz"
 msgstr ""
+
+msgctxt "#37010"
+msgid "Graphics Scaling"
+msgstr ""
+
+msgctxt "#37011"
+msgid "x1"
+msgstr ""
+
+msgctxt "#37012"
+msgid "x1.5"
+msgstr ""
+
+msgctxt "#37013"
+msgid "x2"
+msgstr ""
+
+msgctxt "#37014"
+msgid "x2.5"
+msgstr ""
