@@ -75,6 +75,7 @@ public:
   virtual void vdec_os_api_dma_free(void *ptr) = 0;
   virtual SIGN32 vdec_os_api_suspend_check(void) = 0;
   virtual void vdec_os_api_suspend_ready(void) = 0;
+  virtual UNSG32 vdec_os_api_flush_cache (Ipp8u *addr, UNSG32 size, enum dma_data_direction p3) = 0;
 };
 
 class DllLibVMETA : public DllDynamic, DllLibVMETAInterface
@@ -93,6 +94,7 @@ class DllLibVMETA : public DllDynamic, DllLibVMETAInterface
   DEFINE_METHOD1(void,           vdec_os_api_dma_free,    (void *p1))
   DEFINE_METHOD0(SIGN32,         vdec_os_api_suspend_check)
   DEFINE_METHOD0(void,           vdec_os_api_suspend_ready)
+  DEFINE_METHOD3(UNSG32,         vdec_os_api_flush_cache,   (Ipp8u * p1, UNSG32 p2, enum dma_data_direction p3))
 
   BEGIN_METHOD_RESOLVE()
     RESOLVE_METHOD(DecoderPushBuffer_Vmeta)
@@ -107,6 +109,7 @@ class DllLibVMETA : public DllDynamic, DllLibVMETAInterface
     RESOLVE_METHOD(vdec_os_api_dma_free)
     RESOLVE_METHOD(vdec_os_api_suspend_check)
     RESOLVE_METHOD(vdec_os_api_suspend_ready)
+    RESOLVE_METHOD(vdec_os_api_flush_cache)
   END_METHOD_RESOLVE()
 };
 #endif

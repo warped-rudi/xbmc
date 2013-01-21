@@ -385,6 +385,7 @@ IppCodecStatus CDVDVideoCodecVMETA::SendCodecConfig()
   paddingLen = PADDING_LEN(m_extrasize);
   if (paddingLen)
     memset(pStream->pBuf + m_extrasize, PADDING_BYTE, paddingLen);
+  m_DllVMETA->vdec_os_api_flush_cache (pStream->pBuf, m_extrasize + paddingLen, DMA_TO_DEVICE);
 
   retCodec = m_DllVMETA->DecoderPushBuffer_Vmeta(IPP_VMETA_BUF_TYPE_STRM, pStream, m_pDecState);
   if(retCodec != IPP_STATUS_NOERR)
@@ -452,6 +453,7 @@ int CDVDVideoCodecVMETA::Decode(uint8_t *pData, int iSize, double dts, double pt
         memcpy(pStream->pBuf, pData, std::min<uint32_t>(dataLen, iSize));
         dataLen = (uint32_t)iSize;
       }
+      m_DllVMETA->vdec_os_api_flush_cache (pStream->pBuf, std::min<uint32_t>(dataLen, iSize), DMA_TO_DEVICE);
 
       // did it fit in ?
       if (PADDED_SIZE(dataLen) > pStream->nBufSize)
@@ -474,6 +476,7 @@ int CDVDVideoCodecVMETA::Decode(uint8_t *pData, int iSize, double dts, double pt
           memcpy(pStream->pBuf, pData, iSize);
           dataLen = (uint32_t)iSize;
         }
+        m_DllVMETA->vdec_os_api_flush_cache (pStream->pBuf, std::min<uint32_t>(dataLen, iSize), DMA_TO_DEVICE);
       }
 
       if (dataLen)
@@ -482,8 +485,10 @@ int CDVDVideoCodecVMETA::Decode(uint8_t *pData, int iSize, double dts, double pt
         pStream->nDataLen = dataLen;
 
         dataLen = PADDING_LEN(dataLen);
-        if (dataLen)
+        if (dataLen) {
           memset(pStream->pBuf + pStream->nDataLen, PADDING_BYTE, dataLen);
+          m_DllVMETA->vdec_os_api_flush_cache (pStream->pBuf + pStream->nDataLen, dataLen, DMA_TO_DEVICE);
+        }
 
         if( !m_input_ready.putTail(pStream) )
         {
@@ -655,7 +660,7 @@ IppCodecStatus CDVDVideoCodecVMETA::DecodeInternal()
         if (pPicture->pBuf)
           m_DllVMETA->vdec_os_api_dma_free(pPicture->pBuf);
 
-        pPicture->pBuf = (Ipp8u *)m_DllVMETA->vdec_os_api_dma_alloc_cached(
+        pPicture->pBuf = (Ipp8u *)m_DllVMETA->vdec_os_api_dma_alloc(
                             m_VDecInfo.seq_info.dis_buf_size, VMETA_DIS_BUF_ALIGN, &(pPicture->nPhyAddr));
         pPicture->nBufSize = m_VDecInfo.seq_info.dis_buf_size;
         //printf("vdec_os_api_dma_alloc pPicture->pBuf 0x%08x nr %d\n", (unsigned int)pPicture->pBuf, (int)pPicture->pUsrData0);
