@@ -204,7 +204,7 @@ bool CDoveOverlayRenderer::Configure(
     CLog::Log(LOGERROR, "%s::%s - Failed set source mode", CLASSNAME, __func__);
     return false;
   }
-
+#if 0
   GRAPHICS_SCALING scale = (GRAPHICS_SCALING) g_guiSettings.GetInt("videoscreen.graphics_scaling");
   if (scale == -1) scale=GR_SCALE_100;
   if (scale == GR_SCALE_100) /* Scaler is set differently when using graphics scaler */
@@ -216,7 +216,7 @@ bool CDoveOverlayRenderer::Configure(
       return false;
     }
   }
-
+#endif
   struct _sColorKeyNAlpha alpha;
 
   memset (&alpha, 0, sizeof(alpha));
