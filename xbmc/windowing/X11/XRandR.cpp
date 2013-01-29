@@ -291,15 +291,15 @@ bool CXRandR::SetMode(XOutput output, XMode mode)
     return false;
   CLog::Log(LOGINFO, "XRANDR: %s", cmd);
   int status = system(cmd);
+#ifdef TARGET_MARVELL_DOVE
+  ChangeGraphicsScaler ();
+#endif
   if (status == -1)
     return false;
 
   if (WEXITSTATUS(status) != 0)
     return false;
 
-#ifdef TARGET_MARVELL_DOVE
-  ChangeGraphicsScaler ();
-#endif
   return true;
 }
 
