@@ -43,6 +43,7 @@
 #define CLASSNAME "CDVDVideoCodecVMETA"
 
 #include "utils/BitstreamConverter.h"
+#include "settings/GUISettings.h"
 
 
 #define ENABLE_MPEG1            // use vMeta for MPEG1 decoding
@@ -103,12 +104,34 @@ CDVDVideoCodecVMETA::CDVDVideoCodecVMETA()
   m_itime_inc_bits    = -1;
   m_low_delay         = -1;
   m_codec_species     = -1;
+
+  SetHardwareClock(g_guiSettings.GetInt("videoscreen.vmeta_clk"));
 }
 
 
 CDVDVideoCodecVMETA::~CDVDVideoCodecVMETA()
 {
   Dispose();
+
+  SetHardwareClock(VMETA_CLK_500);
+}
+
+
+void CDVDVideoCodecVMETA::SetHardwareClock(int clkRate)
+{
+  int clkFreqHz = (clkRate == VMETA_CLK_667) ? 667000000 : 500000000;
+
+  CLog::Log(LOGINFO, "%s : Changing vmeta clock to %d MHz", __FUNCTION__, clkFreqHz / 1000000);
+
+  FILE *Fh = fopen("/sys/devices/platform/dove_clocks_sysfs.0/vmeta","w");
+
+  if (Fh != 0)
+  {
+    fprintf (Fh, "%d", clkFreqHz);
+    fclose(Fh);
+  }
+  else
+    CLog::Log(LOGERROR, "Unable to open vmeta clock settings file on sysfs");
 }
 
 

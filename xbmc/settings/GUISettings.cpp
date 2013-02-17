@@ -1420,47 +1420,14 @@ void CGUISettings::LoadXML(TiXmlElement *pRootElement, bool hideSettings /* = fa
   CLog::Log(LOGINFO, "DTS pass through is %s", GetBool("audiooutput.dtspassthrough") ? "enabled" : "disabled");
   CLog::Log(LOGINFO, "AAC pass through is %s", GetBool("audiooutput.passthroughaac") ? "enabled" : "disabled");
 
-#ifdef TARGET_MARVELL_DOVE
-  // For Marvell dove driver; always enable vsync
-  if (GetInt("videoscreen.vsync") == VSYNC_DRIVER)
-  {
-    SetInt("videoscreen.vsync", VSYNC_ALWAYS);
-  }
-  VMETA_CLK clk = (VMETA_CLK) GetInt("videoscreen.vmeta_clk");
-  if ((clk == 500) || (clk == 667))
-  {
-    FILE *Fh;
-    CLog::Log(LOGINFO, "%s : Changing vmeta clock to %d", __FUNCTION__, clk);
-    Fh = fopen("/sys/devices/platform/dove_clocks_sysfs.0/vmeta","w");
-    if (Fh != 0)
-    {
-        fprintf (Fh, "%d",clk*1000000);
-    } else
-      CLog::Log(LOGERROR, "Unable to open vmeta clock settings file on sysfs");
-    fclose(Fh);
-  }
-#endif
-
-#if defined(TARGET_DARWIN)
+#if defined(TARGET_DARWIN) || defined(TARGET_MARVELL_DOVE)
   // trap any previous vsync by driver setting, does not exist on OSX
   if (GetInt("videoscreen.vsync") == VSYNC_DRIVER)
   {
     SetInt("videoscreen.vsync", VSYNC_ALWAYS);
   }
-  VMETA_CLK clk = (VMETA_CLK) GetInt("videoscreen.vmeta_clk");
-  if ((clk == 500) || (clk == 667))
-  {
-    FILE *Fh;
-    CLog::Log(LOGINFO, "%s : Changing vmeta clock to %d", __FUNCTION__, clk);
-    Fh = fopen("/sys/devices/platform/dove_clocks_sysfs.0/vmeta","w");
-    if (Fh != 0)
-    {
-        fprintf (Fh, "%d",clk*1000000);
-    } else
-      CLog::Log(LOGERROR, "Unable to open vmeta clock settings file on sysfs");
-    fclose(Fh);
-  }
 #endif
+
  // DXMERGE: This might have been useful?
  // g_videoConfig.SetVSyncMode((VSYNC)GetInt("videoscreen.vsync"));
 
