@@ -45,7 +45,7 @@
 #include "utils/BitstreamConverter.h"
 
 
-//#define ENABLE_MPEG1            // use vMeta for MPEG1 decoding
+#define ENABLE_MPEG1            // use vMeta for MPEG1 decoding
 //#define ENABLE_PTS              // honour presentation time stamps
 
 
@@ -732,6 +732,13 @@ bool CDVDVideoCodecVMETA::GetPicture(DVDVideoPicture *pDvdVideoPicture)
   pDvdVideoPicture->iDisplayHeight  = m_decoded_height;
   pDvdVideoPicture->iWidth          = m_picture_width;
   pDvdVideoPicture->iHeight         = m_picture_height;
+
+#ifdef ENABLE_MPEG1
+  // Workaround for bug in vMeta that causes a flickering
+  // line on the bottom of the screen
+  if (m_VDecParSet.strm_fmt == IPP_VIDEO_STRM_FMT_MPG1)
+    pDvdVideoPicture->iHeight--;
+#endif
 
   if (m_output_ready.getHead(pPicture))
   {
