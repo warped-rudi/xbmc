@@ -446,7 +446,7 @@ void CGUISettings::Initialize()
   graphics_scaling.insert(make_pair(37012,GR_SCALE_150));
   graphics_scaling.insert(make_pair(37013,GR_SCALE_200));
   graphics_scaling.insert(make_pair(37014,GR_SCALE_250));
-  AddInt(vs, "videoscreen.graphics_scaling", 37010, GR_SCALE_150, graphics_scaling, SPIN_CONTROL_TEXT);
+  AddInt(vs, "videoscreen.graphics_scaling", 37010, GR_SCALE_100, graphics_scaling, SPIN_CONTROL_TEXT);
 #endif
   map<int,int> vsync;
 #if defined(_LINUX) && !defined(TARGET_DARWIN)
