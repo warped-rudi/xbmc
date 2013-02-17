@@ -28,8 +28,7 @@
 #include "PlatformInclude.h"
 #ifdef TARGET_MARVELL_DOVE
 #include <sys/mman.h>
-#include "guilib/Resolution.h"
-#include "settings/GUISettings.h"
+#include "guilib/GraphicContext.h"
 #endif
 #include "utils/XBMCTinyXML.h"
 #include "../xbmc/utils/log.h"
@@ -176,13 +175,13 @@ void CXRandR::ChangeGraphicsScaler(void)
   unsigned int zoomed;
   unsigned int gr_size;
   int zx,zy;
-  GRAPHICS_SCALING scale = (GRAPHICS_SCALING) g_guiSettings.GetInt("videoscreen.graphics_scaling");
-  if (scale == -1) scale=GR_SCALE_100;
+  GRAPHICS_SCALING scale = g_graphicsContext.getGraphicsScale();
+
   if((fd = open("/dev/mem", O_RDWR | O_SYNC)) == -1) {
         CLog::Log(LOGERROR, "XRANDR: Unable to open /dev/mem");
 	return;
   }
-  fflush(stdout);
+
   map_base = mmap(0, MAP_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, fd, target_page);
   zoomed = * (unsigned int *) (map_base + 0x108);
   zx = zoomed & 0xffff;

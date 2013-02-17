@@ -166,8 +166,7 @@ void CDoveOverlayRenderer::ManageDisplay(bool first)
     }
 
     /* Scaler is set differently when using graphics scaler */
-    GRAPHICS_SCALING scale = (GRAPHICS_SCALING) g_guiSettings.GetInt("videoscreen.graphics_scaling");
-    if (scale == GR_SCALE_100 || scale == -1)
+    if (g_graphicsContext.getGraphicsScale() == GR_SCALE_100)
     {
       interpolation = 3;  // bi-linear interpolation
       if (ioctl(m_overlayfd, DOVEFB_IOCTL_SET_INTERPOLATION_MODE, &interpolation) != 0)

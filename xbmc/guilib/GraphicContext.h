@@ -110,6 +110,9 @@ public:
 
   // output scaling
   const RESOLUTION_INFO &GetResInfo() const;
+#ifdef HAS_MARVELL_DOVE
+  static GRAPHICS_SCALING getGraphicsScale();
+#endif
   void SetRenderingResolution(const RESOLUTION_INFO &res, bool needsScaling);  ///< Sets scaling up for rendering
   void SetScalingResolution(const RESOLUTION_INFO &res, bool needsScaling);    ///< Sets scaling up for skin loading etc.
   float GetScalingPixelRatio() const;

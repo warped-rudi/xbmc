@@ -1084,11 +1084,6 @@ void CGUIWindowFullScreen::RenderTTFSubtitles()
     CStdString subtitleText = "How now brown cow";
     if (g_application.m_pPlayer->GetCurrentSubtitle(subtitleText))
     {
-#ifdef HAS_MARVELL_DOVE
-      GRAPHICS_SCALING scale = (GRAPHICS_SCALING) g_guiSettings.GetInt("videoscreen.graphics_scaling");
-      if (scale == -1) /* not configured */
-        scale = GR_SCALE_100;
-#endif
       // Remove HTML-like tags from the subtitles until
       subtitleText.Replace("\\r", "");
       subtitleText.Replace("\r", "");
@@ -1113,6 +1108,7 @@ void CGUIWindowFullScreen::RenderTTFSubtitles()
       g_graphicsContext.SetRenderingResolution(g_graphicsContext.GetResInfo(), false);
 
 #ifdef HAS_MARVELL_DOVE
+      GRAPHICS_SCALING scale = g_graphicsContext.getGraphicsScale();
       float maxWidth = (float) g_settings.m_ResInfo[res].Overscan.right*100/scale - g_settings.m_ResInfo[res].Overscan.left;
 #else
       float maxWidth = (float) g_settings.m_ResInfo[res].Overscan.right - g_settings.m_ResInfo[res].Overscan.left;

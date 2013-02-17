@@ -612,6 +612,15 @@ const RESOLUTION_INFO &CGraphicContext::GetResInfo() const
   return g_settings.m_ResInfo[m_Resolution];
 }
 
+#ifdef HAS_MARVELL_DOVE
+GRAPHICS_SCALING CGraphicContext::getGraphicsScale()
+{
+  int value = g_guiSettings.GetInt("videoscreen.graphics_scaling");
+
+  return (value == -1) ? GR_SCALE_100 : (GRAPHICS_SCALING)value;
+}
+#endif
+
 void CGraphicContext::SetScalingResolution(const RESOLUTION_INFO &res, bool needsScaling)
 {
   Lock();
@@ -627,26 +636,21 @@ void CGraphicContext::SetScalingResolution(const RESOLUTION_INFO &res, bool need
     float fToHeight;
 
 #ifdef HAS_MARVELL_DOVE
-    GRAPHICS_SCALING scale = (GRAPHICS_SCALING) g_guiSettings.GetInt("videoscreen.graphics_scaling");
-    if (scale == -1) /* not configured */
-      scale = GR_SCALE_100;
-    {
-      fFromWidth = (float)res.iWidth;
-      fFromHeight = (float)res.iHeight;
-      fToPosX = (float)g_settings.m_ResInfo[m_Resolution].Overscan.left*100/scale;
-      fToPosY = (float)g_settings.m_ResInfo[m_Resolution].Overscan.top*100/scale;
-      fToWidth = (float)g_settings.m_ResInfo[m_Resolution].Overscan.right*100/scale - fToPosX;
-      fToHeight = (float)g_settings.m_ResInfo[m_Resolution].Overscan.bottom*100/scale - fToPosY;
-    }
+    GRAPHICS_SCALING scale = getGraphicsScale();
+
+    fFromWidth = (float)res.iWidth;
+    fFromHeight = (float)res.iHeight;
+    fToPosX = (float)g_settings.m_ResInfo[m_Resolution].Overscan.left * 100 / scale;
+    fToPosY = (float)g_settings.m_ResInfo[m_Resolution].Overscan.top * 100 / scale;
+    fToWidth = (float)g_settings.m_ResInfo[m_Resolution].Overscan.right * 100 / scale - fToPosX;
+    fToHeight = (float)g_settings.m_ResInfo[m_Resolution].Overscan.bottom * 100 / scale - fToPosY;
 #else
-    {
-      fFromWidth = (float)res.iWidth;
-      fFromHeight = (float)res.iHeight;
-      fToPosX = (float)g_settings.m_ResInfo[m_Resolution].Overscan.left;
-      fToPosY = (float)g_settings.m_ResInfo[m_Resolution].Overscan.top;
-      fToWidth = (float)g_settings.m_ResInfo[m_Resolution].Overscan.right - fToPosX;
-      fToHeight = (float)g_settings.m_ResInfo[m_Resolution].Overscan.bottom - fToPosY;
-    }
+    fFromWidth = (float)res.iWidth;
+    fFromHeight = (float)res.iHeight;
+    fToPosX = (float)g_settings.m_ResInfo[m_Resolution].Overscan.left;
+    fToPosY = (float)g_settings.m_ResInfo[m_Resolution].Overscan.top;
+    fToWidth = (float)g_settings.m_ResInfo[m_Resolution].Overscan.right - fToPosX;
+    fToHeight = (float)g_settings.m_ResInfo[m_Resolution].Overscan.bottom - fToPosY;
 #endif
 
     if(!g_guiSkinzoom) // lookup gui setting if we didn't have it already
