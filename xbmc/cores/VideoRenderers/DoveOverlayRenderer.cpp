@@ -436,6 +436,7 @@ bool CDoveOverlayRenderer::DrawSlice(DVDVideoPicture *pDvdVideoPicture)
 
     unsigned char *dst = currPict.pBuf;
     memcpy( dst, pDvdVideoPicture->data[0], pDvdVideoPicture->iLineSize[0] * pDvdVideoPicture->iHeight );
+    currPict.lineSize[0] = pDvdVideoPicture->iLineSize[0];
 
     if (m_format == RENDER_FMT_YUV420P)
     {
@@ -444,13 +445,16 @@ bool CDoveOverlayRenderer::DrawSlice(DVDVideoPicture *pDvdVideoPicture)
 
       dst += pDvdVideoPicture->iLineSize[0] * pDvdVideoPicture->iHeight;
       memcpy( dst, pDvdVideoPicture->data[1], pDvdVideoPicture->iLineSize[1] * pDvdVideoPicture->iHeight / 2 );
+      currPict.lineSize[1] = pDvdVideoPicture->iLineSize[1];
 
       dst += pDvdVideoPicture->iLineSize[1] * pDvdVideoPicture->iHeight / 2;
       memcpy( dst, pDvdVideoPicture->data[2], pDvdVideoPicture->iLineSize[2] * pDvdVideoPicture->iHeight / 2 );
+      currPict.lineSize[2] = pDvdVideoPicture->iLineSize[2];
     }
     else
     {
       currPict.phyBuf[1] = currPict.phyBuf[2] = 0;
+      currPict.lineSize[1] = currPict.lineSize[2] = 0;
     }
   }
 
