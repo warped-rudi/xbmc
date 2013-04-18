@@ -122,8 +122,6 @@ void CDVDVideoCodecVMETA::SetHardwareClock(int clkRate)
 {
   int clkFreqHz = (clkRate == VMETA_CLK_667) ? 667000000 : 500000000;
 
-  CLog::Log(LOGINFO, "%s : Changing vmeta clock to %d MHz", __FUNCTION__, clkFreqHz / 1000000);
-
   FILE *Fh = fopen("/sys/devices/platform/dove_clocks_sysfs.0/vmeta","w");
 
   if (Fh != 0)
@@ -138,17 +136,23 @@ void CDVDVideoCodecVMETA::SetHardwareClock(int clkRate)
 
 bool CDVDVideoCodecVMETA::Open(CDVDStreamInfo &hints, CDVDCodecOptions &options)
 {
+  IppCodecStatus ret;
+  bool bSendCodecConfig = true;
+
+  m_picture_width  = m_decoded_width  = hints.width;
+  m_picture_height = m_decoded_height = hints.height;
+
+  memset(&m_VDecInfo, 0, sizeof(IppVmetaDecInfo));
+  memset(&m_VDecParSet, 0, sizeof(IppVmetaDecParSet));
+
+  if(!m_decoded_width || !m_decoded_height)
+    return false;
+
   if (!m_DllVMETA->Load() || !m_DllMiscGen->Load())
   {
     CLog::Log(LOGERROR, "%s::%s Error : failed to load vMeta libs !", CLASSNAME, __func__);
     return false;
   }
-
-  m_picture_width  = m_decoded_width  = hints.width;
-  m_picture_height = m_decoded_height = hints.height;
-
-  if(!m_decoded_width || !m_decoded_height)
-    return false;
 
   m_converter = new CBitstreamConverter();
 
@@ -172,11 +176,6 @@ bool CDVDVideoCodecVMETA::Open(CDVDStreamInfo &hints, CDVDCodecOptions &options)
       memcpy(m_extradata, hints.extradata, m_extrasize);
     }
   }
-
-  bool bSendCodecConfig = false;
-
-  memset(&m_VDecInfo, 0, sizeof(IppVmetaDecInfo));
-  memset(&m_VDecParSet, 0, sizeof(IppVmetaDecParSet));
 
   switch (hints.codec)
   {
@@ -202,13 +201,13 @@ bool CDVDVideoCodecVMETA::Open(CDVDStreamInfo &hints, CDVDCodecOptions &options)
       }
 
       m_VDecParSet.strm_fmt = IPP_VIDEO_STRM_FMT_H264;
+      bSendCodecConfig = false;
     }
     break;
 
     case CODEC_ID_MPEG4:
       m_VDecParSet.strm_fmt = IPP_VIDEO_STRM_FMT_MPG4;
       m_video_codec_name = "vmeta-mpeg4";
-      bSendCodecConfig = true;
 
       if (hints.codec_tag = MKTAG('X','V','I','D'))
         m_codec_species = 3;
@@ -225,38 +224,37 @@ bool CDVDVideoCodecVMETA::Open(CDVDStreamInfo &hints, CDVDCodecOptions &options)
     case CODEC_ID_MPEG2VIDEO:
       m_VDecParSet.strm_fmt = IPP_VIDEO_STRM_FMT_MPG2;
       m_video_codec_name = "vmeta-mpeg2";
-      bSendCodecConfig = true;
       break;
 
     case CODEC_ID_H263:
       m_VDecParSet.strm_fmt = IPP_VIDEO_STRM_FMT_H263;
       m_video_codec_name = "vmeta-h263";
-      bSendCodecConfig = true;
       break;
 
     case CODEC_ID_VC1:
       m_VDecParSet.strm_fmt = IPP_VIDEO_STRM_FMT_VC1;
       m_video_codec_name = "vmeta-vc1";
-      bSendCodecConfig = true;
+      break;
+
+    case CODEC_ID_WMV3:
+      m_VDecParSet.strm_fmt = IPP_VIDEO_STRM_FMT_VC1M;
+      m_video_codec_name = "vmeta-wmv3";
       break;
 
 #ifdef ENABLE_MPEG1
     case CODEC_ID_MPEG1VIDEO:
       m_VDecParSet.strm_fmt = IPP_VIDEO_STRM_FMT_MPG1;
       m_video_codec_name = "vmeta-mpeg1";
-      bSendCodecConfig = true;
       break;
 #endif
 
     default:
-      CLog::Log(LOGDEBUG, "%s::%s CodecID 0x%08x not supported by VMETA decoder",
-                CLASSNAME, __func__, hints.codec);
+      CLog::Log(LOGDEBUG, "%s::%s CodecID 0x%08x (%.4s) not supported by VMETA decoder",
+                CLASSNAME, __func__, hints.codec, (char *)&hints.codec_tag);
+      Dispose();
       return false;
   }
 
-  m_VDecParSet.opt_fmt = IPP_YCbCr422I;
-
-  IppCodecStatus ret;
 
   if(m_DllMiscGen->miscInitGeneralCallbackTable(&m_pCbTable) != 0)
   {
@@ -265,6 +263,7 @@ bool CDVDVideoCodecVMETA::Open(CDVDStreamInfo &hints, CDVDCodecOptions &options)
     return false;
   }
 
+  m_VDecParSet.opt_fmt = IPP_YCbCr422I;
   ret = m_DllVMETA->DecoderInitAlloc_Vmeta(&m_VDecParSet, m_pCbTable, &m_pDecState);
   if(ret != IPP_STATUS_NOERR)
   {
@@ -321,7 +320,7 @@ void CDVDVideoCodecVMETA::Dispose()
   m_extrasize = 0;
   m_numBufSubmitted = 0;
   m_video_convert = false;
-  m_video_codec_name  = "";
+  m_video_codec_name = "";
 
   if (m_extradata)
   {
@@ -406,13 +405,40 @@ IppCodecStatus CDVDVideoCodecVMETA::SendCodecConfig()
   IppCodecStatus retCodec;
   IppVmetaBitstream *pStream;
 
-  if (!m_extradata || !m_extrasize ||
-      !m_pDecState || !m_input_available.getHead(pStream) )
-  {
+  if (!m_extradata || !m_extrasize || !m_pDecState)
     return IPP_STATUS_ERR;
+
+
+  if (m_VDecParSet.strm_fmt == IPP_VIDEO_STRM_FMT_VC1M)
+  {
+    vc1m_seq_header seqInfo;
+
+    seqInfo.num_frames = 0xffffff;
+    seqInfo.vert_size  = m_picture_height;
+    seqInfo.horiz_size = m_picture_width;
+    seqInfo.level      = ((m_extradata[0]>>4) == 4) ? 4 : 2;
+    seqInfo.cbr        = 1;
+    seqInfo.hrd_buffer = 0x007fff;
+    seqInfo.hrd_rate   = 0x00007fff;
+    seqInfo.frame_rate = 0xffffffff;
+    seqInfo.exthdrsize = std::min<uint32_t>(m_extrasize, sizeof(seqInfo.exthdr));
+    memcpy(seqInfo.exthdr, m_extradata, seqInfo.exthdrsize);
+
+    retCodec = m_DllVMETA->DecodeSendCmd_Vmeta(
+                  IPPVC_SET_VC1M_SEQ_INFO, &seqInfo, NULL, m_pDecState);
+
+    if (retCodec != IPP_STATUS_NOERR)
+      CLog::Log(LOGERROR, "%s::%s Error : Set VC1M sequence info ", CLASSNAME, __func__);
+
+    return retCodec;
   }
 
+
+  if (!m_input_available.getHead(pStream))
+    return IPP_STATUS_ERR;
+
   memcpy(pStream->pBuf, m_extradata, m_extrasize);
+  pStream->nOffset  = 0;
   pStream->nDataLen = m_extrasize;
   pStream->nFlag    = IPP_VMETA_STRM_BUF_END_OF_UNIT;
 
@@ -420,16 +446,16 @@ IppCodecStatus CDVDVideoCodecVMETA::SendCodecConfig()
   if (paddingLen)
     memset(pStream->pBuf + m_extrasize, PADDING_BYTE, paddingLen);
 
-  retCodec = m_DllVMETA->DecoderPushBuffer_Vmeta(IPP_VMETA_BUF_TYPE_STRM, pStream, m_pDecState);
-  if(retCodec != IPP_STATUS_NOERR)
+  retCodec = m_DllVMETA->DecoderPushBuffer_Vmeta(
+                IPP_VMETA_BUF_TYPE_STRM, pStream, m_pDecState);
+
+  if (retCodec != IPP_STATUS_NOERR)
   {
     CLog::Log(LOGERROR, "%s::%s Error : Push streambuffer", CLASSNAME, __func__);
-
     m_input_available.putTail(pStream);
-    return IPP_STATUS_ERR;
   }
 
-  return IPP_STATUS_NOERR;
+  return retCodec;
 }
 
 
@@ -437,6 +463,7 @@ int CDVDVideoCodecVMETA::Decode(uint8_t *pData, int iSize, double dts, double pt
 {
   int iSize2nd = 0;
   uint32_t bufOfs = 0;
+  bool bInjectHdr = false;
   static const uint8_t VC1FrameStartCode[4]  = { 0x00, 0x00, 0x01, 0x0d };
 #ifdef ENABLE_PTS
   int numStreamBufs = 0;
@@ -468,8 +495,17 @@ int CDVDVideoCodecVMETA::Decode(uint8_t *pData, int iSize, double dts, double pt
     }
     else if (m_VDecParSet.strm_fmt == IPP_VIDEO_STRM_FMT_VC1)
     {
-      if (digest_vc1_inbuf(pData, iSize) )
-        bufOfs = sizeof(VC1FrameStartCode);
+      // SMPTE 421M sec. G.8 says the frame start code is optional,
+      // but vMeta only can decode the stream with frame start code
+      bInjectHdr = digest_vc1_inbuf(pData, iSize);
+      if (bInjectHdr)
+        bufOfs = sizeof(uint32_t);
+    }
+    else if (m_VDecParSet.strm_fmt == IPP_VIDEO_STRM_FMT_VC1M)
+    {
+      // this offset is not strictly necessary, but it may
+      // avoid internal memory copy
+      bufOfs = VMETA_COM_PKT_HDR_SIZE;
     }
   }
 
@@ -490,9 +526,6 @@ int CDVDVideoCodecVMETA::Decode(uint8_t *pData, int iSize, double dts, double pt
       }
       else
       {
-        if (bufOfs)
-          memcpy(pStream->pBuf, VC1FrameStartCode, sizeof(VC1FrameStartCode));
-
         memcpy(pStream->pBuf+bufOfs, pData, std::min<uint32_t>(dataLen-bufOfs, iSize));
         dataLen = (uint32_t)iSize+bufOfs;
       }
@@ -506,6 +539,7 @@ int CDVDVideoCodecVMETA::Decode(uint8_t *pData, int iSize, double dts, double pt
         pStream->pBuf = (Ipp8u *)m_DllVMETA->vdec_os_api_dma_alloc_writecombine(
                               dataLen, VMETA_STRM_BUF_ALIGN, &pStream->nPhyAddr);
         pStream->nBufSize = dataLen;
+        pStream->nOffset  = 0;
         pStream->nDataLen = 0;
 
         // retry (using a larger buffer)
@@ -515,9 +549,6 @@ int CDVDVideoCodecVMETA::Decode(uint8_t *pData, int iSize, double dts, double pt
         }
         else
         {
-          if (bufOfs)
-            memcpy(pStream->pBuf, VC1FrameStartCode, sizeof(VC1FrameStartCode));
-
           memcpy(pStream->pBuf+bufOfs, pData, iSize);
           dataLen = (uint32_t)iSize+bufOfs;
         }
@@ -525,8 +556,18 @@ int CDVDVideoCodecVMETA::Decode(uint8_t *pData, int iSize, double dts, double pt
 
       if (dataLen)
       {
-        pStream->nFlag = IPP_VMETA_STRM_BUF_END_OF_UNIT;
+        if (bInjectHdr)
+        {
+          *(uint32_t *)pStream->pBuf = *(uint32_t *)VC1FrameStartCode;
+          pStream->nOffset = 0;
+        }
+        else
+        {
+          pStream->nOffset = bufOfs;
+        }
+
         pStream->nDataLen = dataLen;
+        pStream->nFlag = IPP_VMETA_STRM_BUF_END_OF_UNIT;
 
         dataLen = PADDING_LEN(dataLen);
         if (dataLen)

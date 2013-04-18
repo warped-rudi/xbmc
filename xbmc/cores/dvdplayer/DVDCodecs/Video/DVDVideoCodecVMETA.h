@@ -59,7 +59,7 @@ private:
 
   uint8_t *digest_mpeg4_inbuf(uint8_t *pData, int iSize);
   uint8_t *digest_mpeg2_inbuf(uint8_t *pData, int iSize);
-  bool    digest_vc1_inbuf(uint8_t *pData, int iSize);
+  inline bool digest_vc1_inbuf(uint8_t *pData, int iSize);
 
 protected:
   // Video format
