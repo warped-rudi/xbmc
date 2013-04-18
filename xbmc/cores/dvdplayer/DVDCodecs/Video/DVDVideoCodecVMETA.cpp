@@ -436,6 +436,8 @@ IppCodecStatus CDVDVideoCodecVMETA::SendCodecConfig()
 int CDVDVideoCodecVMETA::Decode(uint8_t *pData, int iSize, double dts, double pts)
 {
   int iSize2nd = 0;
+  uint32_t bufOfs = 0;
+  static const uint8_t VC1FrameStartCode[4]  = { 0x00, 0x00, 0x01, 0x0d };
 #ifdef ENABLE_PTS
   int numStreamBufs = 0;
 #endif
@@ -464,6 +466,11 @@ int CDVDVideoCodecVMETA::Decode(uint8_t *pData, int iSize, double dts, double pt
       // special handling: determine MPEG2 aspect ratio
       digest_mpeg2_inbuf(pData, iSize);
     }
+    else if (m_VDecParSet.strm_fmt == IPP_VIDEO_STRM_FMT_VC1)
+    {
+      if (digest_vc1_inbuf(pData, iSize) )
+        bufOfs = sizeof(VC1FrameStartCode);
+    }
   }
 
 
@@ -483,8 +490,11 @@ int CDVDVideoCodecVMETA::Decode(uint8_t *pData, int iSize, double dts, double pt
       }
       else
       {
-        memcpy(pStream->pBuf, pData, std::min<uint32_t>(dataLen, iSize));
-        dataLen = (uint32_t)iSize;
+        if (bufOfs)
+          memcpy(pStream->pBuf, VC1FrameStartCode, sizeof(VC1FrameStartCode));
+
+        memcpy(pStream->pBuf+bufOfs, pData, std::min<uint32_t>(dataLen-bufOfs, iSize));
+        dataLen = (uint32_t)iSize+bufOfs;
       }
 
       // did it fit in ?
@@ -505,8 +515,11 @@ int CDVDVideoCodecVMETA::Decode(uint8_t *pData, int iSize, double dts, double pt
         }
         else
         {
-          memcpy(pStream->pBuf, pData, iSize);
-          dataLen = (uint32_t)iSize;
+          if (bufOfs)
+            memcpy(pStream->pBuf, VC1FrameStartCode, sizeof(VC1FrameStartCode));
+
+          memcpy(pStream->pBuf+bufOfs, pData, iSize);
+          dataLen = (uint32_t)iSize+bufOfs;
         }
       }
 
@@ -1084,6 +1097,12 @@ uint8_t *CDVDVideoCodecVMETA::digest_mpeg2_inbuf(uint8_t *pData, int iSize)
   }
 
   return 0;
+}
+
+
+bool CDVDVideoCodecVMETA::digest_vc1_inbuf(uint8_t *pData, int iSize)
+{
+  return (iSize < 3 || pData[0] != 0x00 || pData[1] != 0x00 || pData[2] != 0x01);
 }
 
 
