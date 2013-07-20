@@ -1495,6 +1495,16 @@ bool A10VLInit(int &width, int &height, double &refreshRate)
     return false;
   }
 
+  // tell /dev/disp the API version we are using
+  args[0] = SUNXI_DISP_VERSION;
+  args[1] = 0;
+  args[2] = 0;
+  args[3] = 0;
+  i = ioctl(g_hdisp, DISP_CMD_VERSION, args);
+  CLog::Log(LOGNOTICE, "A10: display API version is: %d.%d\n", 
+            SUNXI_DISP_VERSION_MAJOR_GET(i),
+            SUNXI_DISP_VERSION_MINOR_GET(i));
+
   args[0] = g_screenid;
   args[1] = 0;
   args[2] = 0;

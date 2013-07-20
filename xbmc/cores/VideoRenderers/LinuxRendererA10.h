@@ -40,6 +40,15 @@ extern "C" {
 #ifndef CEDARV_FRAME_HAS_PHY_ADDR
 #include <os_adapter.h>
 #endif
+
+#ifndef SUNXI_DISP_VERSION
+#define SUNXI_DISP_VERSION_MAJOR 1
+#define SUNXI_DISP_VERSION_MINOR 0
+#define SUNXI_DISP_VERSION ((SUNXI_DISP_VERSION_MAJOR << 16) | SUNXI_DISP_VERSION_MINOR)
+#define SUNXI_DISP_VERSION_MAJOR_GET(x) (((x) >> 16) & 0x7FFF)
+#define SUNXI_DISP_VERSION_MINOR_GET(x) ((x) & 0xFFFF)
+#define DISP_CMD_VERSION DISP_CMD_RESERVE0
+#endif
 }
 
 class CRenderCapture;
