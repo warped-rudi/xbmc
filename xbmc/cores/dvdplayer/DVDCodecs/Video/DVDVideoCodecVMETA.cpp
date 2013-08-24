@@ -209,11 +209,11 @@ bool CDVDVideoCodecVMETA::Open(CDVDStreamInfo &hints, CDVDCodecOptions &options)
       m_VDecParSet.strm_fmt = IPP_VIDEO_STRM_FMT_MPG4;
       m_video_codec_name = "vmeta-mpeg4";
 
-      if (hints.codec_tag = MKTAG('X','V','I','D'))
+      if (hints.codec_tag == MKTAG('X','V','I','D'))
         m_codec_species = 3;
-      else if (hints.codec_tag = MKTAG('D','X','5','0'))
+      else if (hints.codec_tag == MKTAG('D','X','5','0'))
         m_codec_species = 2;
-      else if (hints.codec_tag = MKTAG('D','I','V','X'))
+      else if (hints.codec_tag == MKTAG('D','I','V','X'))
         m_codec_species = 1;
       else
         m_codec_species = 0;
