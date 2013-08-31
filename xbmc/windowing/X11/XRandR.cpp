@@ -190,6 +190,13 @@ void CXRandR::ChangeGraphicsScaler(void)
   gr_size = (zy*100/scale) & 0xffff;
   gr_size = (gr_size << 16) | ((zx*100/scale) & 0xffff);
   * (unsigned int *) (map_base + 0x104) = gr_size;
+
+  /* toggle bi-linear interpolation depending on scaling mode */
+  if (scale == GR_SCALE_100)
+    * (unsigned int *) (map_base + 0x1bc) |= 0x000c0000;
+  else
+    * (unsigned int *) (map_base + 0x1bc) &= ~0x000c0000;
+
   close(fd);
 }
 #endif
