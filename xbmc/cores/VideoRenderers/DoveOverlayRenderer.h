@@ -184,7 +184,7 @@ private:
   int                   m_overlayfd;
   int                   m_enabled;
   struct _sOvlySurface  m_overlaySurface;
-  struct _sViewPortInfo m_overlayPlaneInfo;
+  int                   m_interpolation;
 
   DllLibMiscGen         *m_DllMiscGen;
   DllLibVMETA           *m_DllVMETA;
