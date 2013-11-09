@@ -23,6 +23,8 @@
 #include "cores/AudioEngine/Utils/AEUtil.h"
 #include "music/tags/TagLoaderTagLib.h"
 
+#define NUM_FRAMES	3
+
 FLACCodec::FLACCodec()
 {
   m_SampleRate = 0;
@@ -37,8 +39,9 @@ FLACCodec::FLACCodec()
 
   m_pBuffer=NULL;
   m_BufferSize=0;
+  m_BufferHead=0;
+  m_BufferTail=0;
   m_MaxFrameSize=0;
-
 }
 
 FLACCodec::~FLACCodec()
@@ -104,9 +107,13 @@ bool FLACCodec::Init(const CStdString &strFile, unsigned int filecache)
     delete[] m_pBuffer;
     m_pBuffer=NULL;
   }
+
   //  allocate the buffer to hold the audio data,
-  //  it is 5 times bigger then a single decoded frame
-  m_pBuffer=new BYTE[m_MaxFrameSize*5];
+  //  it is (NUM_FRAMES + 1) times bigger then a single decoded frame
+  m_BufferSize = m_MaxFrameSize * (NUM_FRAMES + 1);
+  m_pBuffer = new BYTE[m_BufferSize];
+  m_BufferHead = 0;
+  m_BufferTail = 0;
 
   return true;
 }
@@ -129,7 +136,7 @@ int64_t FLACCodec::Seek(int64_t iSeekTime)
   // set the buffer size to 0 first, as this invokes a WriteCallback which
   // may be called when the buffer is almost full (resulting in a buffer
   // overrun unless we reset m_BufferSize first).
-  m_BufferSize=0;
+  m_BufferHead = m_BufferTail;
   if(!m_dll.FLAC__stream_decoder_seek_absolute(m_pFlacDecoder, (int64_t)(iSeekTime*m_SampleRate)/1000))
     CLog::Log(LOGERROR, "FLACCodec::Seek - failed to seek");
 
@@ -145,44 +152,39 @@ int64_t FLACCodec::Seek(int64_t iSeekTime)
 
 int FLACCodec::ReadPCM(BYTE *pBuffer, int size, int *actualsize)
 {
-  *actualsize=0;
-
-  bool eof=false;
-  if (m_dll.FLAC__stream_decoder_get_state(m_pFlacDecoder)==FLAC__STREAM_DECODER_END_OF_STREAM)
-    eof=true;
-
-  if (!eof)
-  {
-    //  fill our buffer 4 decoded frame (the buffer could hold 5)
-    while(m_BufferSize < m_MaxFrameSize*4 &&
+  //  fill our buffer NUM_FRAMES decoded frame (the buffer could hold NUM_FRAMES + 1)
+  while(BufferFillCount() < m_MaxFrameSize * NUM_FRAMES &&
           m_dll.FLAC__stream_decoder_get_state(m_pFlacDecoder)!=FLAC__STREAM_DECODER_END_OF_STREAM)
+  {
+    if (!m_dll.FLAC__stream_decoder_process_single(m_pFlacDecoder))
     {
-      if (!m_dll.FLAC__stream_decoder_process_single(m_pFlacDecoder))
-      {
-        CLog::Log(LOGERROR, "FLACCodec: Error decoding single block");
-        return READ_ERROR;
-      }
+      CLog::Log(LOGERROR, "FLACCodec: Error decoding single block");
+      *actualsize=0;
+      return READ_ERROR;
     }
   }
 
-  if (size<m_BufferSize)
-  { //  do we need less audio data then in our buffer
-    memcpy(pBuffer, m_pBuffer, size);
-    memmove(m_pBuffer, m_pBuffer+size, m_BufferSize-size);
-    m_BufferSize-=size;
-    *actualsize=size;
-  }
-  else
+  BYTE *pTemp = pBuffer;
+  while (size > 0)
   {
-    memcpy(pBuffer, m_pBuffer, m_BufferSize);
-    *actualsize=m_BufferSize;
-    m_BufferSize=0;
+    int portion = BufferGetCount();
+
+    if (portion <= 0)
+      break;
+
+    if (portion > size)
+      portion = size;
+
+    memcpy(pTemp, m_pBuffer + m_BufferHead, portion);
+    pTemp += portion;
+    size -= portion;
+    m_BufferHead = (m_BufferHead + portion) % m_BufferSize;
   }
+  *actualsize = pTemp - pBuffer;
 
-  if (eof && m_BufferSize==0)
-    return READ_EOF;
-
-  return READ_SUCCESS;
+  return (m_BufferHead == m_BufferTail &&
+          m_dll.FLAC__stream_decoder_get_state(m_pFlacDecoder)==FLAC__STREAM_DECODER_END_OF_STREAM)
+          ?  READ_EOF : READ_SUCCESS;
 }
 
 bool FLACCodec::CanInit()
@@ -262,43 +264,67 @@ FLAC__StreamDecoderWriteStatus FLACCodec::DecoderWriteCallback(const FLAC__Strea
     return FLAC__STREAM_DECODER_WRITE_STATUS_ABORT;
 
   const int bytes_per_sample = frame->header.bits_per_sample/8;
-  BYTE* outptr = pThis->m_pBuffer+pThis->m_BufferSize;
-  FLAC__int16* outptr16 = (FLAC__int16 *) outptr;
-  FLAC__int32* outptr32 = (FLAC__int32 *) outptr;
+  BYTE* outptr = pThis->m_pBuffer + pThis->m_BufferTail;
+  int outcnt = 0, outlen = pThis->BufferPutCount();
 
-  unsigned int current_sample = 0;
-  for(current_sample = 0; current_sample < frame->header.blocksize; current_sample++)
+  #ifdef __BIG_ENDIAN__
+  int endian_shift = 32 - frame->header.bits_per_sample;
+  #endif
+
+  for(unsigned int current_sample = 0; current_sample < frame->header.blocksize; current_sample++)
   {
     for(unsigned int channel = 0; channel < frame->header.channels; channel++)
     {
-      switch(bytes_per_sample)
+      FLAC__int32 v = buffer[channel][current_sample];
+
+      // make 1 byte samples unsigned
+      if (bytes_per_sample == 1) 
+        v ^= 0x80;
+
+      #ifdef __BIG_ENDIAN__
+      v <<= endian_shift;
+      #endif
+
+      if (outlen - outcnt >= 4)
       {
-        case 2:
-          outptr16[current_sample*frame->header.channels + channel] = (FLAC__int16) buffer[channel][current_sample];
-          break;
-        case 3:
-          outptr[2] = (buffer[channel][current_sample] >> 16) & 0xff;
-          outptr[1] = (buffer[channel][current_sample] >> 8 ) & 0xff;
-          outptr[0] = (buffer[channel][current_sample] >> 0 ) & 0xff;
-          outptr += bytes_per_sample;
-          break;
-        default:
-          outptr32[current_sample*frame->header.channels + channel] = buffer[channel][current_sample];
-          break;
+        *((FLAC__int32 *)outptr) = v;
+
+        outptr += bytes_per_sample;
+        outcnt += bytes_per_sample;
+
+        if (outcnt >= outlen)
+        {
+          pThis->m_BufferTail = (pThis->m_BufferTail + outcnt) % pThis->m_BufferSize;
+          outcnt = 0;
+          outlen = pThis->BufferPutCount();
+          outptr = pThis->m_pBuffer + pThis->m_BufferTail;
+        }
+        
+        continue;
+      }
+
+      for(int byte_no = 0; byte_no < bytes_per_sample; byte_no++)
+      {
+        #ifdef __BIG_ENDIAN__
+        *outptr++ = (BYTE)(v >> 24);
+        v <<= 8;
+        #else
+        *outptr++ = (BYTE)v;
+        v >>= 8;
+        #endif
+
+        if (++outcnt >= outlen)
+        {
+          pThis->m_BufferTail = (pThis->m_BufferTail + outcnt) % pThis->m_BufferSize;
+          outcnt = 0;
+          outlen = pThis->BufferPutCount();
+          outptr = pThis->m_pBuffer + pThis->m_BufferTail;
+        }
       }
     }
   }
 
-  if (bytes_per_sample == 1)
-  {
-    for(unsigned int i=0;i<current_sample;i++)
-    {
-      BYTE* outptr=pThis->m_pBuffer+pThis->m_BufferSize;
-      outptr[i]^=0x80;
-    }
-  }
-
-  pThis->m_BufferSize += current_sample*bytes_per_sample*frame->header.channels;
+  pThis->m_BufferTail = (pThis->m_BufferTail + outcnt) % pThis->m_BufferSize;
 
   return FLAC__STREAM_DECODER_WRITE_STATUS_CONTINUE;
 }
