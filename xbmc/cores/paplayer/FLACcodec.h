@@ -51,8 +51,27 @@ private:
 
   DllLibFlac  m_dll;
   BYTE* m_pBuffer;                    //  buffer to hold the decoded audio data
-  int m_BufferSize;                   //  size of buffer is filled with decoded audio data
+  int m_BufferSize;                   //  allocated size of buffer
+  int m_BufferHead;                   //  buffer head index
+  int m_BufferTail;                   //  buffer tail index
   int m_MaxFrameSize;                 //  size of a single decoded frame
   FLAC__StreamDecoder* m_pFlacDecoder;
   CAEChannelInfo m_ChannelInfo;
+  
+  int BufferFillCount() const
+  {
+    int i = m_BufferTail - m_BufferHead;
+    return (i < 0) ?  (i + m_BufferSize) : i;
+  }
+  
+  int BufferGetCount() const
+  {
+    return ((m_BufferTail >= m_BufferHead) ?  m_BufferTail : m_BufferSize) - m_BufferHead;
+  }
+
+  int BufferPutCount() const
+  {
+    return ((m_BufferTail >= m_BufferHead) ?  
+              (m_BufferSize + ((m_BufferHead == 0) ?  0 : 1)) : m_BufferHead) - m_BufferTail - 1;
+  }
 };
