@@ -58,14 +58,14 @@ private:
   IppCodecStatus DecodeInternal();
 
   uint8_t *digest_mpeg4_inbuf(uint8_t *pData, int iSize);
-  uint8_t *digest_mpeg2_inbuf(uint8_t *pData, int iSize);
+  uint8_t *digest_mpeg12_inbuf(uint32_t codecId, uint8_t *pData, int iSize);
   inline bool digest_vc1_inbuf(uint8_t *pData, int iSize);
 
 protected:
   // Video format
   bool                            m_drop_state;
-  unsigned int                    m_decoded_width;
-  unsigned int                    m_decoded_height;
+  unsigned int                    m_display_width;
+  unsigned int                    m_display_height;
   unsigned int                    m_picture_width;
   unsigned int                    m_picture_height;
   bool                            m_is_open;
