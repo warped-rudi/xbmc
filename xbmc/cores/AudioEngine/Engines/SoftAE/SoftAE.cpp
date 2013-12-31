@@ -240,7 +240,7 @@ void CSoftAE::InternalOpenSink()
         newFormat.m_channelLayout.ResolveChannels(m_stdChLayout);
       else
       {
-        if (m_masterStream->m_initChannelLayout == AE_CH_LAYOUT_2_0)
+        if (m_masterStream->m_initChannelLayout.Count() <= 2)
           m_transcode = false;
         m_encoderInitFrameSizeMul  = 1.0 / (newFormat.m_channelLayout.Count() * 
                                            (CAEUtil::DataFormatToBits(newFormat.m_dataFormat) >> 3));
