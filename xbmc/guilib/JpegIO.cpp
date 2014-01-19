@@ -415,6 +415,14 @@ bool CJpegIO::Decode(const unsigned char *pixels, unsigned int pitch, unsigned i
     }
     else if (format == XB_FMT_A8R8G8B8)
     {
+#ifdef JCS_ALPHA_EXTENSIONS
+      m_cinfo.out_color_space = JCS_EXT_BGRA;
+      while (m_cinfo.output_scanline < m_height)
+      {
+        jpeg_read_scanlines(&m_cinfo, &dst, 1);
+        dst += pitch;
+      }
+#else
       unsigned char* row = new unsigned char[m_width * 3];
       while (m_cinfo.output_scanline < m_height)
       {
@@ -431,6 +439,7 @@ bool CJpegIO::Decode(const unsigned char *pixels, unsigned int pitch, unsigned i
         dst += pitch;
       }
       delete[] row;
+#endif
     }
     else
     {
@@ -486,8 +495,13 @@ bool CJpegIO::CreateThumbnailFromSurface(unsigned char* buffer, unsigned int wid
   JSAMPROW row_pointer[1];
   long unsigned int outBufSize = width * height;
   unsigned char* result;
+#ifdef JCS_ALPHA_EXTENSIONS
+  J_COLOR_SPACE color_space = JCS_RGB;
+  int components = 3;
+#else
   unsigned char* src = buffer;
   unsigned char* rgbbuf, *src2, *dst2;
+#endif
 
   if(buffer == NULL)
   {
@@ -502,6 +516,19 @@ bool CJpegIO::CreateThumbnailFromSurface(unsigned char* buffer, unsigned int wid
     return false;
   }
 
+#ifdef JCS_ALPHA_EXTENSIONS
+  if(format == XB_FMT_A8R8G8B8)
+  {
+    color_space = JCS_EXT_BGRX;
+    components = 4;
+  }
+  else if(format != XB_FMT_RGB8)
+  {
+    CLog::Log(LOGWARNING, "JpegIO::CreateThumbnailFromSurface Unsupported format");
+    free(result);
+    return false;
+  }
+#else
   if(format == XB_FMT_RGB8)
   {
     rgbbuf = buffer;
@@ -531,6 +558,7 @@ bool CJpegIO::CreateThumbnailFromSurface(unsigned char* buffer, unsigned int wid
     free(result);
     return false;
   }
+#endif    
 
   cinfo.err = jpeg_std_error(&jerr.pub);
   jerr.pub.error_exit = jpeg_error_exit;
@@ -540,8 +568,10 @@ bool CJpegIO::CreateThumbnailFromSurface(unsigned char* buffer, unsigned int wid
   {
     jpeg_destroy_compress(&cinfo);
     free(result);
+#ifndef JCS_ALPHA_EXTENSIONS
     if(format != XB_FMT_RGB8)
       delete [] rgbbuf;
+#endif    
     return false;
   }
   else
@@ -553,23 +583,34 @@ bool CJpegIO::CreateThumbnailFromSurface(unsigned char* buffer, unsigned int wid
 #endif
     cinfo.image_width = width;
     cinfo.image_height = height;
+#ifdef JCS_ALPHA_EXTENSIONS
+    cinfo.input_components = components;
+    cinfo.in_color_space = color_space;
+#else
     cinfo.input_components = 3;
     cinfo.in_color_space = JCS_RGB;
+#endif    
     jpeg_set_defaults(&cinfo);
     jpeg_set_quality(&cinfo, 90, TRUE);
     jpeg_start_compress(&cinfo, TRUE);
 
     while (cinfo.next_scanline < cinfo.image_height)
     {
+#ifdef JCS_ALPHA_EXTENSIONS
+      row_pointer[0] = &buffer[cinfo.next_scanline * pitch];
+#else      
       row_pointer[0] = &rgbbuf[cinfo.next_scanline * width * 3];
+#endif      
       jpeg_write_scanlines(&cinfo, row_pointer, 1);
     }
 
     jpeg_finish_compress(&cinfo);
     jpeg_destroy_compress(&cinfo);
   }
+#ifndef JCS_ALPHA_EXTENSIONS
   if(format != XB_FMT_RGB8)
     delete [] rgbbuf;
+#endif
 
   XFILE::CFile file;
   if (file.OpenForWrite(destFile, true))
