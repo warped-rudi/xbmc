@@ -92,7 +92,8 @@ protected:
   FastFiFo<double, PICTURE_FIFO_SIZE>            m_pts_queue;
 
   unsigned int                    m_frame_no;
-  unsigned int                    m_numBufSubmitted;
+  unsigned int                    m_numPicBufSubmitted;
+  unsigned int                    m_numStrmBufSubmitted;
 
   int                             m_itime_inc_bits;
   int                             m_low_delay;

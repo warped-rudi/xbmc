@@ -95,7 +95,8 @@ CDVDVideoCodecVMETA::CDVDVideoCodecVMETA()
   m_video_convert     = false;
   m_video_codec_name  = "";
   m_frame_no          = 0;
-  m_numBufSubmitted   = 0;
+  m_numPicBufSubmitted  = 0;
+  m_numStrmBufSubmitted = 0;
 
   m_DllMiscGen        = new DllLibMiscGen();
   m_DllVMETA          = new DllLibVMETA();
@@ -298,7 +299,8 @@ bool CDVDVideoCodecVMETA::Open(CDVDStreamInfo &hints, CDVDCodecOptions &options)
   }
 
   m_video_convert = m_converter->NeedConvert();
-  m_numBufSubmitted = 0;
+  m_numPicBufSubmitted = 0;
+  m_numStrmBufSubmitted = 0;
   m_frame_no = 0;
   m_is_open = true;
 
@@ -318,7 +320,8 @@ void CDVDVideoCodecVMETA::Dispose()
 
   m_frame_no = 0;
   m_extrasize = 0;
-  m_numBufSubmitted = 0;
+  m_numPicBufSubmitted = 0;
+  m_numStrmBufSubmitted = 0;
   m_video_convert = false;
   m_video_codec_name = "";
 
@@ -670,13 +673,13 @@ IppCodecStatus CDVDVideoCodecVMETA::DecodeInternal()
           return IPP_STATUS_ERR;
         }
 
-        m_numBufSubmitted++;
+        m_numStrmBufSubmitted++;
       }
       break;
 
     case IPP_STATUS_RETURN_INPUT_BUF:
       //CLog::Log(LOGNOTICE, "IPP_STATUS_RETURN_INPUT_BUF");
-      while (m_numBufSubmitted)
+      while (m_numStrmBufSubmitted)
       {
         m_DllVMETA->DecoderPopBuffer_Vmeta(IPP_VMETA_BUF_TYPE_STRM, (void **)&pStream, m_pDecState);
 
@@ -685,7 +688,7 @@ IppCodecStatus CDVDVideoCodecVMETA::DecodeInternal()
 
         CLEAR_STREAMBUF(pStream);
         m_input_available.putTail(pStream);
-        m_numBufSubmitted--;
+        m_numStrmBufSubmitted--;
       }
       break;
 
@@ -695,8 +698,8 @@ IppCodecStatus CDVDVideoCodecVMETA::DecodeInternal()
 
       if (pPicture)
       {
-        pPicture->pUsrData1 = (void *)m_frame_no;
-        m_frame_no++;
+        pPicture->pUsrData1 = (void *)(m_frame_no++);
+        m_numPicBufSubmitted--;
 
         if (!m_output_ready.putTail(pPicture))
         {
@@ -705,7 +708,7 @@ IppCodecStatus CDVDVideoCodecVMETA::DecodeInternal()
         }
       }
 
-      while (m_numBufSubmitted)
+      while (m_numStrmBufSubmitted)
       {
         m_DllVMETA->DecoderPopBuffer_Vmeta(IPP_VMETA_BUF_TYPE_STRM, (void **)&pStream, m_pDecState);
 
@@ -714,7 +717,7 @@ IppCodecStatus CDVDVideoCodecVMETA::DecodeInternal()
 
         CLEAR_STREAMBUF(pStream);
         m_input_available.putTail(pStream);
-        m_numBufSubmitted--;
+        m_numStrmBufSubmitted--;
       }
 
       // The gstreamer plugins says this is needed for DOVE
@@ -766,12 +769,14 @@ IppCodecStatus CDVDVideoCodecVMETA::DecodeInternal()
       }
 
       retCodec = m_DllVMETA->DecoderPushBuffer_Vmeta(IPP_VMETA_BUF_TYPE_PIC, pPicture, m_pDecState);
-      if(retCodec != IPP_STATUS_NOERR)
+      if (retCodec != IPP_STATUS_NOERR)
       {
         CLog::Log(LOGERROR, "IPP_STATUS_NEED_OUTPUT_BUF: push picturebuffer failed");
         m_output_available.putTail(pPicture);
         return IPP_STATUS_ERR;
       }
+
+      m_numPicBufSubmitted++;
       break;
 
     case IPP_STATUS_NEW_VIDEO_SEQ:
@@ -784,7 +789,7 @@ IppCodecStatus CDVDVideoCodecVMETA::DecodeInternal()
                   m_picture_width, m_picture_height);
       }
 
-      for(;;)
+      while (m_numPicBufSubmitted)
       {
         m_DllVMETA->DecoderPopBuffer_Vmeta(IPP_VMETA_BUF_TYPE_PIC, (void **)&pPicture, m_pDecState);
 
@@ -792,6 +797,7 @@ IppCodecStatus CDVDVideoCodecVMETA::DecodeInternal()
           break;
 
         m_output_available.putTail(pPicture);
+        m_numPicBufSubmitted--;
       }
       break;
 
@@ -888,7 +894,7 @@ void CDVDVideoCodecVMETA::Reset(void)
     m_input_available.putTail(pStream);
   }
 
-  m_numBufSubmitted = 0;
+  m_numStrmBufSubmitted = 0;
 
   IppVmetaPicture *pPicture = 0;
   while (m_output_ready.getHead(pPicture))
@@ -903,6 +909,8 @@ void CDVDVideoCodecVMETA::Reset(void)
 
     m_output_available.putTail(pPicture);
   }
+  
+  m_numPicBufSubmitted = 0;
 }
 
 
