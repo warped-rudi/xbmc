@@ -479,12 +479,12 @@ int CDVDVideoCodecVMETA::Decode(uint8_t *pData, int iSize, double dts, double pt
       // special handling: MPEG4 packed bitstream
       uint8_t *digest_ret = digest_mpeg4_inbuf(pData, iSize);
 
-      if ((uint32_t)digest_ret == 0xffffffff)
+      if (((uint32_t)digest_ret | 0x1) == 0xffffffff)
       {
         pData = 0;
-        iSize = 0;      // Skip null VOP
+        iSize = 0;      // Skip null VOP and stuffing byte
       }
-      else if ((uint32_t)digest_ret)
+      else if (digest_ret)
       {
         int iTemp = digest_ret - pData;
         iSize2nd = iSize - iTemp;
