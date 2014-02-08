@@ -29,6 +29,8 @@
 
 #if defined(HAS_MARVELL_DOVE)
 #include "DynamicDll.h"
+#include "threads/SingleLock.h"
+#include "utils/GlobalsHandling.h"
 
 extern "C"
 {
@@ -112,4 +114,14 @@ class DllLibVMETA : public DllDynamic, DllLibVMETAInterface
     RESOLVE_METHOD(vdec_os_api_flush_cache)
   END_METHOD_RESOLVE()
 };
+
+XBMC_GLOBAL_REF(DllLibVMETA, g_DllLibVMETA);
+#define g_DllLibVMETA XBMC_GLOBAL_USE(DllLibVMETA)
+
+XBMC_GLOBAL_REF(DllLibMiscGen, g_DllLibMiscGen);
+#define g_DllLibMiscGen XBMC_GLOBAL_USE(DllLibMiscGen)
+
+XBMC_GLOBAL_REF(CCriticalSection, g_CritSecVMETA);
+#define g_CritSecVMETA XBMC_GLOBAL_USE(CCriticalSection)
+
 #endif

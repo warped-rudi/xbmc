@@ -30,6 +30,7 @@
 #include "DVDVideoCodecVMETA.h"
 #include "DynamicDll.h"
 
+#include "threads/SingleLock.h"
 #include "utils/log.h"
 #include "DVDClock.h"
 
@@ -87,6 +88,9 @@
 
 
 CDVDVideoCodecVMETA::CDVDVideoCodecVMETA()
+  :  m_HwLock(g_CritSecVMETA),
+     m_DllVMETA(g_DllLibVMETA),
+     m_DllMiscGen(g_DllLibMiscGen)
 {
   m_is_open           = false;
   m_extradata         = NULL;
@@ -97,9 +101,6 @@ CDVDVideoCodecVMETA::CDVDVideoCodecVMETA()
   m_frame_no          = 0;
   m_numPicBufSubmitted  = 0;
   m_numStrmBufSubmitted = 0;
-
-  m_DllMiscGen        = new DllLibMiscGen();
-  m_DllVMETA          = new DllLibVMETA();
 
   m_pDecState         = NULL;
   m_pCbTable          = NULL;
@@ -149,7 +150,7 @@ bool CDVDVideoCodecVMETA::Open(CDVDStreamInfo &hints, CDVDCodecOptions &options)
   if(!m_display_width || !m_display_height)
     return false;
 
-  if (!m_DllVMETA->Load() || !m_DllMiscGen->Load())
+  if (!m_DllVMETA.Load() || !m_DllMiscGen.Load())
   {
     CLog::Log(LOGERROR, "%s::%s Error : failed to load vMeta libs !", CLASSNAME, __func__);
     return false;
@@ -257,7 +258,7 @@ bool CDVDVideoCodecVMETA::Open(CDVDStreamInfo &hints, CDVDCodecOptions &options)
   }
 
 
-  if(m_DllMiscGen->miscInitGeneralCallbackTable(&m_pCbTable) != 0)
+  if(m_DllMiscGen.miscInitGeneralCallbackTable(&m_pCbTable) != 0)
   {
     CLog::Log(LOGERROR, "%s::%s Error : miscInitGeneralCallbackTable", CLASSNAME, __func__);
     Dispose();
@@ -265,7 +266,7 @@ bool CDVDVideoCodecVMETA::Open(CDVDStreamInfo &hints, CDVDCodecOptions &options)
   }
 
   m_VDecParSet.opt_fmt = IPP_YCbCr422I;
-  ret = m_DllVMETA->DecoderInitAlloc_Vmeta(&m_VDecParSet, m_pCbTable, &m_pDecState);
+  ret = m_DllVMETA.DecoderInitAlloc_Vmeta(&m_VDecParSet, m_pCbTable, &m_pDecState);
   if(ret != IPP_STATUS_NOERR)
   {
     CLog::Log(LOGERROR, "%s::%s Error : DecoderInitAlloc_Vmeta", CLASSNAME, __func__);
@@ -278,7 +279,7 @@ bool CDVDVideoCodecVMETA::Open(CDVDStreamInfo &hints, CDVDCodecOptions &options)
     IppVmetaBitstream *pStream = (IppVmetaBitstream *)malloc(sizeof(IppVmetaBitstream));
     memset(pStream, 0, sizeof(IppVmetaBitstream));
 
-    pStream->pBuf = (Ipp8u *)m_DllVMETA->vdec_os_api_dma_alloc_writecombine(
+    pStream->pBuf = (Ipp8u *)m_DllVMETA.vdec_os_api_dma_alloc_writecombine(
                                 STREAM_VDECBUF_SIZE, VMETA_STRM_BUF_ALIGN, &pStream->nPhyAddr);
     pStream->nBufSize = STREAM_VDECBUF_SIZE;
     CLEAR_STREAMBUF(pStream);
@@ -339,17 +340,17 @@ void CDVDVideoCodecVMETA::Dispose()
 
   if (m_pDecState)
   {
-    m_DllVMETA->DecodeSendCmd_Vmeta(IPPVC_STOP_DECODE_STREAM, NULL, NULL, m_pDecState);
+    m_DllVMETA.DecodeSendCmd_Vmeta(IPPVC_STOP_DECODE_STREAM, NULL, NULL, m_pDecState);
 
     Reset();
 
-    m_DllVMETA->DecoderFree_Vmeta(&m_pDecState);
+    m_DllVMETA.DecoderFree_Vmeta(&m_pDecState);
     m_pDecState = 0;
   }
 
   if (m_pCbTable)
   {
-    m_DllMiscGen->miscFreeGeneralCallbackTable(&m_pCbTable);
+    m_DllMiscGen.miscFreeGeneralCallbackTable(&m_pCbTable);
     m_pCbTable = 0;
   }
 
@@ -362,7 +363,7 @@ void CDVDVideoCodecVMETA::Dispose()
     m_input_buffers.pop_front();
 
     if(pStream->pBuf)
-      m_DllVMETA->vdec_os_api_dma_free(pStream->pBuf);
+      m_DllVMETA.vdec_os_api_dma_free(pStream->pBuf);
     free(pStream);
   }
 
@@ -375,24 +376,13 @@ void CDVDVideoCodecVMETA::Dispose()
     m_output_buffers.pop_front();
 
     if(pPicture->pBuf)
-      m_DllVMETA->vdec_os_api_dma_free(pPicture->pBuf);
+      m_DllVMETA.vdec_os_api_dma_free(pPicture->pBuf);
     free(pPicture);
   }
 
 
-  if (m_DllVMETA)
-  {
-    m_DllVMETA->Unload();
-    delete m_DllVMETA;
-    m_DllVMETA = 0;
-  }
-
-  if (m_DllMiscGen)
-  {
-    m_DllMiscGen->Unload();
-    delete m_DllMiscGen;
-    m_DllMiscGen = 0;
-  }
+  m_DllMiscGen.Unload();
+  m_DllVMETA.Unload();
 }
 
 
@@ -427,7 +417,7 @@ IppCodecStatus CDVDVideoCodecVMETA::SendCodecConfig()
     seqInfo.exthdrsize = std::min<uint32_t>(m_extrasize, sizeof(seqInfo.exthdr));
     memcpy(seqInfo.exthdr, m_extradata, seqInfo.exthdrsize);
 
-    retCodec = m_DllVMETA->DecodeSendCmd_Vmeta(
+    retCodec = m_DllVMETA.DecodeSendCmd_Vmeta(
                   IPPVC_SET_VC1M_SEQ_INFO, &seqInfo, NULL, m_pDecState);
 
     if (retCodec != IPP_STATUS_NOERR)
@@ -449,7 +439,7 @@ IppCodecStatus CDVDVideoCodecVMETA::SendCodecConfig()
   if (paddingLen)
     memset(pStream->pBuf + m_extrasize, PADDING_BYTE, paddingLen);
 
-  retCodec = m_DllVMETA->DecoderPushBuffer_Vmeta(
+  retCodec = m_DllVMETA.DecoderPushBuffer_Vmeta(
                 IPP_VMETA_BUF_TYPE_STRM, pStream, m_pDecState);
 
   if (retCodec != IPP_STATUS_NOERR)
@@ -541,10 +531,10 @@ int CDVDVideoCodecVMETA::Decode(uint8_t *pData, int iSize, double dts, double pt
       // did it fit in ?
       if (PADDED_SIZE(dataLen) > pStream->nBufSize)
       {
-        m_DllVMETA->vdec_os_api_dma_free(pStream->pBuf);
+        m_DllVMETA.vdec_os_api_dma_free(pStream->pBuf);
 
         dataLen = ALIGN_SIZE(dataLen, 65536) + 65536;
-        pStream->pBuf = (Ipp8u *)m_DllVMETA->vdec_os_api_dma_alloc_writecombine(
+        pStream->pBuf = (Ipp8u *)m_DllVMETA.vdec_os_api_dma_alloc_writecombine(
                               dataLen, VMETA_STRM_BUF_ALIGN, &pStream->nPhyAddr);
         pStream->nBufSize = dataLen;
         pStream->nOffset  = 0;
@@ -655,7 +645,7 @@ IppCodecStatus CDVDVideoCodecVMETA::DecodeInternal()
   IppVmetaPicture *pPicture;
   IppVmetaBitstream *pStream;
 
-  IppCodecStatus retCodec = m_DllVMETA->DecodeFrame_Vmeta(&m_VDecInfo, m_pDecState);
+  IppCodecStatus retCodec = m_DllVMETA.DecodeFrame_Vmeta(&m_VDecInfo, m_pDecState);
 
   switch(retCodec)
   {
@@ -663,7 +653,7 @@ IppCodecStatus CDVDVideoCodecVMETA::DecodeInternal()
       //CLog::Log(LOGNOTICE, "IPP_STATUS_NEED_INPUT");
       while (m_input_ready.getHead(pStream))
       {
-        retCodec = m_DllVMETA->DecoderPushBuffer_Vmeta(IPP_VMETA_BUF_TYPE_STRM, pStream, m_pDecState);
+        retCodec = m_DllVMETA.DecoderPushBuffer_Vmeta(IPP_VMETA_BUF_TYPE_STRM, pStream, m_pDecState);
         if (retCodec != IPP_STATUS_NOERR)
         {
           CLog::Log(LOGERROR, "IPP_STATUS_NEED_INPUT: push streambuffer failed");
@@ -681,7 +671,7 @@ IppCodecStatus CDVDVideoCodecVMETA::DecodeInternal()
       //CLog::Log(LOGNOTICE, "IPP_STATUS_RETURN_INPUT_BUF");
       while (m_numStrmBufSubmitted)
       {
-        m_DllVMETA->DecoderPopBuffer_Vmeta(IPP_VMETA_BUF_TYPE_STRM, (void **)&pStream, m_pDecState);
+        m_DllVMETA.DecoderPopBuffer_Vmeta(IPP_VMETA_BUF_TYPE_STRM, (void **)&pStream, m_pDecState);
 
         if (!pStream)
           break;
@@ -694,7 +684,7 @@ IppCodecStatus CDVDVideoCodecVMETA::DecodeInternal()
 
     case IPP_STATUS_FRAME_COMPLETE:
       //CLog::Log(LOGNOTICE, "IPP_STATUS_FRAME_COMPLETE");
-      m_DllVMETA->DecoderPopBuffer_Vmeta(IPP_VMETA_BUF_TYPE_PIC, (void **)&pPicture, m_pDecState);
+      m_DllVMETA.DecoderPopBuffer_Vmeta(IPP_VMETA_BUF_TYPE_PIC, (void **)&pPicture, m_pDecState);
 
       if (pPicture)
       {
@@ -710,7 +700,7 @@ IppCodecStatus CDVDVideoCodecVMETA::DecodeInternal()
 
       while (m_numStrmBufSubmitted)
       {
-        m_DllVMETA->DecoderPopBuffer_Vmeta(IPP_VMETA_BUF_TYPE_STRM, (void **)&pStream, m_pDecState);
+        m_DllVMETA.DecoderPopBuffer_Vmeta(IPP_VMETA_BUF_TYPE_STRM, (void **)&pStream, m_pDecState);
 
         if (!pStream)
           break;
@@ -721,14 +711,14 @@ IppCodecStatus CDVDVideoCodecVMETA::DecodeInternal()
       }
 
       // The gstreamer plugins says this is needed for DOVE
-      if (m_DllVMETA->vdec_os_api_suspend_check())
+      if (m_DllVMETA.vdec_os_api_suspend_check())
       {
-        IppCodecStatus suspendRet = m_DllVMETA->DecodeSendCmd_Vmeta(IPPVC_PAUSE, NULL, NULL, m_pDecState);
+        IppCodecStatus suspendRet = m_DllVMETA.DecodeSendCmd_Vmeta(IPPVC_PAUSE, NULL, NULL, m_pDecState);
         if (suspendRet == IPP_STATUS_NOERR)
         {
-          m_DllVMETA->vdec_os_api_suspend_ready();
+          m_DllVMETA.vdec_os_api_suspend_ready();
 
-          suspendRet = m_DllVMETA->DecodeSendCmd_Vmeta(IPPVC_RESUME, NULL, NULL, m_pDecState);
+          suspendRet = m_DllVMETA.DecodeSendCmd_Vmeta(IPPVC_RESUME, NULL, NULL, m_pDecState);
           if (suspendRet != IPP_STATUS_NOERR)
           {
             CLog::Log(LOGERROR, "%s::%s resume failed", CLASSNAME, __func__);
@@ -752,9 +742,9 @@ IppCodecStatus CDVDVideoCodecVMETA::DecodeInternal()
       if (m_VDecInfo.seq_info.dis_buf_size > pPicture->nBufSize)
       {
         if (pPicture->pBuf)
-          m_DllVMETA->vdec_os_api_dma_free(pPicture->pBuf);
+          m_DllVMETA.vdec_os_api_dma_free(pPicture->pBuf);
 
-        pPicture->pBuf = (Ipp8u *)m_DllVMETA->vdec_os_api_dma_alloc(
+        pPicture->pBuf = (Ipp8u *)m_DllVMETA.vdec_os_api_dma_alloc(
                             m_VDecInfo.seq_info.dis_buf_size, VMETA_DIS_BUF_ALIGN, &(pPicture->nPhyAddr));
         pPicture->nBufSize = m_VDecInfo.seq_info.dis_buf_size;
       }
@@ -768,7 +758,7 @@ IppCodecStatus CDVDVideoCodecVMETA::DecodeInternal()
         return IPP_STATUS_ERR;
       }
 
-      retCodec = m_DllVMETA->DecoderPushBuffer_Vmeta(IPP_VMETA_BUF_TYPE_PIC, pPicture, m_pDecState);
+      retCodec = m_DllVMETA.DecoderPushBuffer_Vmeta(IPP_VMETA_BUF_TYPE_PIC, pPicture, m_pDecState);
       if (retCodec != IPP_STATUS_NOERR)
       {
         CLog::Log(LOGERROR, "IPP_STATUS_NEED_OUTPUT_BUF: push picturebuffer failed");
@@ -791,7 +781,7 @@ IppCodecStatus CDVDVideoCodecVMETA::DecodeInternal()
 
       while (m_numPicBufSubmitted)
       {
-        m_DllVMETA->DecoderPopBuffer_Vmeta(IPP_VMETA_BUF_TYPE_PIC, (void **)&pPicture, m_pDecState);
+        m_DllVMETA.DecoderPopBuffer_Vmeta(IPP_VMETA_BUF_TYPE_PIC, (void **)&pPicture, m_pDecState);
 
         if (!pPicture)
           break;
@@ -885,7 +875,7 @@ void CDVDVideoCodecVMETA::Reset(void)
 
   for(;;)
   {
-    m_DllVMETA->DecoderPopBuffer_Vmeta(IPP_VMETA_BUF_TYPE_STRM, (void **)&pStream, m_pDecState);
+    m_DllVMETA.DecoderPopBuffer_Vmeta(IPP_VMETA_BUF_TYPE_STRM, (void **)&pStream, m_pDecState);
 
     if(!pStream)
       break;
@@ -902,7 +892,7 @@ void CDVDVideoCodecVMETA::Reset(void)
 
   for(;;)
   {
-    m_DllVMETA->DecoderPopBuffer_Vmeta(IPP_VMETA_BUF_TYPE_PIC, (void **)&pPicture, m_pDecState);
+    m_DllVMETA.DecoderPopBuffer_Vmeta(IPP_VMETA_BUF_TYPE_PIC, (void **)&pPicture, m_pDecState);
 
     if(!pPicture)
       break;

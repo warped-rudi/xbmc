@@ -11421,6 +11421,8 @@ msgctxt "#36041"
 msgid "* Item folder"
 msgstr ""
 
+# CuBox / VMETA - specific items
+
 msgctxt "#37000"
 msgid "Vmeta Clock Speed"
 msgstr ""
@@ -11452,3 +11454,8 @@ msgstr ""
 msgctxt "#37014"
 msgid "x2.5"
 msgstr ""
+
+msgctxt "#37020"
+msgid "Use Hardware JPEG Decoding"
+msgstr ""
+

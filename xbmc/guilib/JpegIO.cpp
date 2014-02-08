@@ -27,6 +27,7 @@
 #include "utils/log.h"
 #include "XBTF.h"
 #include "JpegIO.h"
+#include "JpegHwDec.h"
 
 #include <setjmp.h>
 
@@ -230,6 +231,8 @@ static void x_jpeg_mem_dest (j_compress_ptr cinfo,
 
 CJpegIO::CJpegIO()
 {
+  m_hwDec  = CJpegHwDec::create();
+
   m_width  = 0;
   m_height = 0;
   m_orientation = 0;
@@ -242,11 +245,12 @@ CJpegIO::CJpegIO()
 CJpegIO::~CJpegIO()
 {
   Close();
+  CJpegHwDec::destroy(m_hwDec);
 }
 
 void CJpegIO::Close()
 {
-  free(m_inputBuff);
+  m_hwDec->FreeBuffer(m_inputBuff);
   m_inputBuffSize = 0;
 }
 
@@ -285,7 +289,7 @@ bool CJpegIO::Open(const CStdString &texturePath, unsigned int minx, unsigned in
       if (!free_space)
       { // (re)alloc
         m_inputBuffSize += chunksize;
-        m_inputBuff = (unsigned char *)realloc(m_inputBuff, m_inputBuffSize);
+        m_inputBuff = m_hwDec->ReallocBuffer(m_inputBuff, m_inputBuffSize);
         if (!m_inputBuff)
         {
           CLog::Log(LOGERROR, "%s unable to allocate buffer of size %u", __FUNCTION__, m_inputBuffSize);
@@ -300,6 +304,7 @@ bool CJpegIO::Open(const CStdString &texturePath, unsigned int minx, unsigned in
       if (!read)
         break;
     }
+    m_hwDec->PrepareBuffer(total_read);
     m_inputBuffSize = total_read;
     file.Close();
 
@@ -367,13 +372,13 @@ bool CJpegIO::Read(unsigned char* buffer, unsigned int bufSize, unsigned int min
     m_cinfo.scale_denom = 8;
     m_cinfo.out_color_space = JCS_RGB;
     unsigned int maxtexsize = g_Windowing.GetMaxTextureSize();
-    for (unsigned int scale = 1; scale <= 8; scale++)
+    for (unsigned int scale = m_hwDec->FirstScale(); scale <= 8; scale = m_hwDec->NextScale(scale, +1) )
     {
       m_cinfo.scale_num = scale;
       jpeg_calc_output_dimensions(&m_cinfo);
       if ((m_cinfo.output_width > maxtexsize) || (m_cinfo.output_height > maxtexsize))
       {
-        m_cinfo.scale_num--;
+        m_cinfo.scale_num = m_hwDec->NextScale(scale, -1);
         break;
       }
       if (m_cinfo.output_width >= minx && m_cinfo.output_height >= miny)
@@ -389,9 +394,17 @@ bool CJpegIO::Read(unsigned char* buffer, unsigned int bufSize, unsigned int min
   }
 }
 
-bool CJpegIO::Decode(const unsigned char *pixels, unsigned int pitch, unsigned int format)
+bool CJpegIO::Decode(unsigned char *dst, unsigned int pitch, unsigned int format)
 {
-  unsigned char *dst = (unsigned char*)pixels;
+  if (//strstr(m_texturePath.c_str(), "DSC0000") &&
+      m_hwDec->CanDecode(m_cinfo.image_width, 
+                          m_cinfo.image_height) &&
+      m_hwDec->Decode(dst, pitch, format, m_cinfo.output_width, 
+                       m_cinfo.output_height, m_cinfo.scale_num, m_cinfo.scale_denom))
+  {
+    jpeg_destroy_decompress(&m_cinfo);
+    return true;
+  }
 
   struct my_error_mgr jerr;
   m_cinfo.err = jpeg_std_error(&jerr.pub);

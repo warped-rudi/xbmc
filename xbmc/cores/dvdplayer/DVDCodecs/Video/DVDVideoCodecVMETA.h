@@ -27,6 +27,8 @@
 #include "DllVMETA.h"
 
 #include "utils/FastFifo.h"
+#include "threads/SingleLock.h"
+
 #define STREAM_FIFO_SIZE        16      // most efficient, when a power of 2
 #define PICTURE_FIFO_SIZE       32      // most efficient, when a power of 2
 
@@ -99,8 +101,9 @@ protected:
   int                             m_low_delay;
   int                             m_codec_species;
 
-  DllLibMiscGen                   *m_DllMiscGen;
-  DllLibVMETA                     *m_DllVMETA;
+  CSingleLock                     m_HwLock;
+  DllLibVMETA                     &m_DllVMETA;
+  DllLibMiscGen                   &m_DllMiscGen;
 };
 
 #endif
