@@ -309,11 +309,11 @@ void CJpegHwDecVMeta::PrepareBuffer(unsigned int numBytes)
 }
 
 
-int CJpegHwDecVMeta::DecodePopBuffers(IppVmetaBufferType type, ReturnMode mode)
+int CJpegHwDecVMeta::DecodePopBuffers(IppVmetaBufferType type, ReturnMode mode, int maxCount)
 {
-  int count = 0;
+  int count;
 
-  for (;;)
+  for (count = 0; count < maxCount; count++)
   {
     union { void *p; IppVmetaBitstream *strm; IppVmetaPicture *pic; };
 
@@ -344,8 +344,6 @@ int CJpegHwDecVMeta::DecodePopBuffers(IppVmetaBufferType type, ReturnMode mode)
 
     if (mode & ReleaseBuffer)
       ::free(p);
-
-    count++;
   }
 
   return count;
@@ -423,7 +421,7 @@ bool CJpegHwDecVMeta::DecodePicture(unsigned int maxWidth,
     case IPP_STATUS_RETURN_INPUT_BUF:
       //CLog::Log(LOGNOTICE, "IPP_STATUS_RETURN_INPUT_BUF");
 
-      numSubmitted -= DecodePopBuffers(IPP_VMETA_BUF_TYPE_STRM, ReleaseBuffer);
+      numSubmitted -= DecodePopBuffers(IPP_VMETA_BUF_TYPE_STRM, ReleaseBuffer, numSubmitted);
       break;
 
     case IPP_STATUS_NEED_OUTPUT_BUF:
@@ -453,8 +451,7 @@ bool CJpegHwDecVMeta::DecodePicture(unsigned int maxWidth,
     case IPP_STATUS_FRAME_COMPLETE:
       //CLog::Log(LOGNOTICE, "IPP_STATUS_FRAME_COMPLETE");
 
-      DecodePopBuffers(IPP_VMETA_BUF_TYPE_PIC, ReleaseNothing);
-      numSubmitted -= DecodePopBuffers(IPP_VMETA_BUF_TYPE_STRM, ReleaseBuffer);
+      DecodePopBuffers(IPP_VMETA_BUF_TYPE_PIC, ReleaseNothing, 1);
 
 #if 0
       if (m_picture.pBuf)
@@ -464,11 +461,15 @@ bool CJpegHwDecVMeta::DecodePicture(unsigned int maxWidth,
       }
 #endif
 
+      numSubmitted -= DecodePopBuffers(IPP_VMETA_BUF_TYPE_STRM, ReleaseBuffer, numSubmitted);
       bExit = true;
       break;
 
     case IPP_STATUS_END_OF_STREAM:
       //CLog::Log(LOGNOTICE, "IPP_STATUS_END_OF_STREAM");
+
+      numSubmitted -= DecodePopBuffers(IPP_VMETA_BUF_TYPE_STRM, ReleaseBuffer, numSubmitted);
+      bExit = true;
       break;
 
     case IPP_STATUS_WAIT_FOR_EVENT:
@@ -480,7 +481,7 @@ bool CJpegHwDecVMeta::DecodePicture(unsigned int maxWidth,
 
       if (m_picture.pBuf)
       {
-        DecodePopBuffers(IPP_VMETA_BUF_TYPE_PIC, ReleaseStorage);
+        DecodePopBuffers(IPP_VMETA_BUF_TYPE_PIC, ReleaseStorage, 1);
         m_picture.pBuf = 0;
       }
       

@@ -69,7 +69,7 @@ private:
   enum { StreamBufAlloc = 128 * 1024, StreamBufLimit = 2047 * 1024 };
   enum ReturnMode { ReleaseNothing = 0x00, ReleaseStorage = 0x01, ReleaseBuffer = 0x02, ReleaseAll = 0x03 };
 
-  int  DecodePopBuffers(IppVmetaBufferType type, ReturnMode mode);
+  int  DecodePopBuffers(IppVmetaBufferType type, ReturnMode mode, int maxCount = INT_MAX);
   bool DecodePicture(unsigned int maxWidth, unsigned int maxHeight, unsigned int scaleDivider);
 
   void ToBGRA(unsigned char *dst, unsigned int pitch, unsigned int width, unsigned int height);
