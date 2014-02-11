@@ -396,11 +396,22 @@ bool CJpegIO::Read(unsigned char* buffer, unsigned int bufSize, unsigned int min
 
 bool CJpegIO::Decode(unsigned char *dst, unsigned int pitch, unsigned int format)
 {
-  if (//strstr(m_texturePath.c_str(), "DSC0000") &&
-      m_hwDec->CanDecode(m_cinfo.image_width, 
-                          m_cinfo.image_height) &&
+  unsigned int featureFlags = 0;
+
+  if (m_cinfo.progressive_mode)
+    featureFlags |= CJpegHwDec::ffProgressive;
+  if (m_cinfo.arith_code)
+    featureFlags |= CJpegHwDec::ffArithmeticCoding;
+
+#if 0
+  if (strstr(m_texturePath.c_str(), "DSC0000") != 0)
+    featureFlags |= CJpegHwDec::ffForceFallback;
+#endif    
+
+  if (m_hwDec->CanDecode(featureFlags,
+                         m_cinfo.image_width, m_cinfo.image_height) &&
       m_hwDec->Decode(dst, pitch, format, m_cinfo.output_width, 
-                       m_cinfo.output_height, m_cinfo.scale_num, m_cinfo.scale_denom))
+                      m_cinfo.output_height, m_cinfo.scale_num, m_cinfo.scale_denom))
   {
     jpeg_destroy_decompress(&m_cinfo);
     return true;

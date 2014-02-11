@@ -597,10 +597,14 @@ void CJpegHwDecVMeta::ToBGRA(unsigned char *dst, unsigned int pitch,
 }
 
 
-bool CJpegHwDecVMeta::CanDecode(unsigned int width, unsigned int height) const
+bool CJpegHwDecVMeta::CanDecode(unsigned int featureFlags,
+                                unsigned int width, unsigned int height) const
 {
-  // don't use hardware for small pictures ...
-  return m_pDecState != 0 && width * height >= 100 * 100;
+  // Don't use hardware for small pictures ...
+  // Also don't try pictures using unsupported JPEG features
+  return m_pDecState != 0 && 
+         width * height >= 100 * 100 &&
+         !(featureFlags & (ffForceFallback | ffProgressive | ffArithmeticCoding));
 }
 
 

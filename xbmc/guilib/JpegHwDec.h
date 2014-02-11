@@ -78,10 +78,12 @@ public:
    \brief Check, if hardware decoding should be used
    \param width The width of the image to be decoded
    \param height The height of the image to be decoded
+   \param featureFlags A combination of ffXXXX enums
    \return true if the hardware can/should handle this image
    */
-  virtual bool CanDecode(unsigned int width, 
-                         unsigned int height) const { return false; };
+  virtual bool CanDecode(unsigned int featureFlags, 
+                         unsigned int width, unsigned int height) const { return false; }
+  enum { ffForceFallback = 0x01, ffProgressive = 0x02, ffArithmeticCoding = 0x04 };
                                    
   /*!
    \brief Decode the image

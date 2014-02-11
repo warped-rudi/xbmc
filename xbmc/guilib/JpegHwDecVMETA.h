@@ -58,8 +58,8 @@ protected:
   virtual void          FreeBuffer(unsigned char *buffer);
   virtual void          PrepareBuffer(unsigned int numBytes);
 
-  virtual bool          CanDecode(unsigned int width, 
-                                  unsigned int height) const;
+  virtual bool          CanDecode(unsigned int featureFlags,
+                                  unsigned int width, unsigned int height) const;
   virtual bool          Decode(unsigned char *dst, 
                                unsigned int pitch, unsigned int format,
                                unsigned int maxWidth, unsigned int maxHeight,
