@@ -206,7 +206,8 @@ void CJpegHwDecVMeta::Dispose()
     m_DllVMETA.DecoderFree_Vmeta(&m_pDecState);
   }
 
-  FreeBuffer(0);
+  if (m_input.pBuf)
+    FreeBuffer(m_input.pBuf);
 
   if (m_pCbTable)
     m_DllMiscGen.miscFreeGeneralCallbackTable(&m_pCbTable);
@@ -375,7 +376,7 @@ bool CJpegHwDecVMeta::DecodePicture(unsigned int maxWidth,
     case IPP_STATUS_NEED_INPUT:
       //CLog::Log(LOGNOTICE, "IPP_STATUS_NEED_INPUT");
 
-      if (m_input.nOffset < m_input.nBufSize)
+      if (m_input.nOffset < m_input.nDataLen)
       {
         IppVmetaBitstream *pStream = (IppVmetaBitstream *)malloc(sizeof(IppVmetaBitstream));
         memset(pStream, 0, sizeof(IppVmetaBitstream));
@@ -392,7 +393,7 @@ bool CJpegHwDecVMeta::DecodePicture(unsigned int maxWidth,
         if (pStream->nDataLen != pStream->nBufSize)
           pStream->nFlag = IPP_VMETA_STRM_BUF_END_OF_UNIT;
 
-        m_input.nOffset += pStream->nBufSize;
+        m_input.nOffset += pStream->nDataLen;
 
 #if 0
         CLog::Log(LOGNOTICE, "%s: @%08x %d (%d, %08x) phys %08x", __FUNCTION__, pStream->pBuf,
