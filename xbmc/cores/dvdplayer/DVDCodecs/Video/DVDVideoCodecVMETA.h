@@ -55,7 +55,6 @@ public:
   const char *GetName() { return m_video_codec_name.c_str(); };
 
 private:
-  void SetHardwareClock(int clkRate);
   IppCodecStatus SendCodecConfig();
   IppCodecStatus DecodeInternal();
 

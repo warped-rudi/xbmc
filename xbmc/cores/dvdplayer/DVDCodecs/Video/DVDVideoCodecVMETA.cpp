@@ -108,7 +108,7 @@ CDVDVideoCodecVMETA::CDVDVideoCodecVMETA()
   m_low_delay         = -1;
   m_codec_species     = -1;
 
-  SetHardwareClock(g_guiSettings.GetInt("videoscreen.vmeta_clk"));
+  DllLibVMETA::SetHardwareClock(g_guiSettings.GetInt("videoscreen.vmeta_clk") == VMETA_CLK_667);
 }
 
 
@@ -116,23 +116,7 @@ CDVDVideoCodecVMETA::~CDVDVideoCodecVMETA()
 {
   Dispose();
 
-  SetHardwareClock(VMETA_CLK_500);
-}
-
-
-void CDVDVideoCodecVMETA::SetHardwareClock(int clkRate)
-{
-  int clkFreqHz = (clkRate == VMETA_CLK_667) ? 667000000 : 500000000;
-
-  FILE *Fh = fopen("/sys/devices/platform/dove_clocks_sysfs.0/vmeta","w");
-
-  if (Fh != 0)
-  {
-    fprintf (Fh, "%d", clkFreqHz);
-    fclose(Fh);
-  }
-  else
-    CLog::Log(LOGERROR, "Unable to open vmeta clock settings file on sysfs");
+  DllLibVMETA::SetHardwareClock(false);
 }
 
 

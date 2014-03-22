@@ -113,6 +113,21 @@ class DllLibVMETA : public DllDynamic, DllLibVMETAInterface
     RESOLVE_METHOD(vdec_os_api_suspend_ready)
     RESOLVE_METHOD(vdec_os_api_flush_cache)
   END_METHOD_RESOLVE()
+
+public:
+  static bool SetHardwareClock(bool rateSel)
+  {
+    char buf[32];
+    int  clkFreqHz = (rateSel) ? 667000000 : 500000000;
+    int  fd = open("/sys/devices/platform/dove_clocks_sysfs.0/vmeta", O_WRONLY);
+    
+    if (fd < 0)
+      return false;
+    
+    write(fd, buf, sprintf(buf, "%d", clkFreqHz));
+    close(fd);
+    return true;
+  }
 };
 
 XBMC_GLOBAL_REF(DllLibVMETA, g_DllLibVMETA);

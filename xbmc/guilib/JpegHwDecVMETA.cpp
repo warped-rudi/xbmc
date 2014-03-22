@@ -173,7 +173,7 @@ bool CJpegHwDecVMeta::Init()
 
   if (m_HwLock.IsOwner() && m_DllVMETA.Load() && m_DllMiscGen.Load())
   {
-    SetHardwareClock(g_guiSettings.GetInt("videoscreen.vmeta_clk"));
+    DllLibVMETA::SetHardwareClock(g_guiSettings.GetInt("videoscreen.vmeta_clk") == VMETA_CLK_667);
 
     if (m_DllMiscGen.miscInitGeneralCallbackTable(&m_pCbTable) == 0)
     {
@@ -217,7 +217,7 @@ void CJpegHwDecVMeta::Dispose()
     m_DllMiscGen.Unload();
     m_DllVMETA.Unload();
 
-    SetHardwareClock(VMETA_CLK_500);
+    DllLibVMETA::SetHardwareClock(false);
   }
 }
 
@@ -646,22 +646,6 @@ bool CJpegHwDecVMeta::Decode(unsigned char *dst,
   }
 
   return bOk;
-}
-
-
-void CJpegHwDecVMeta::SetHardwareClock(int clkRate)
-{
-  int clkFreqHz = (clkRate == VMETA_CLK_667) ? 667000000 : 500000000;
-
-  FILE *Fh = fopen("/sys/devices/platform/dove_clocks_sysfs.0/vmeta","w");
-
-  if (Fh != 0)
-  {
-    fprintf (Fh, "%d", clkFreqHz);
-    fclose(Fh);
-  }
-  else
-    CLog::Log(LOGERROR, "Unable to open vmeta clock settings file on sysfs");
 }
 
 

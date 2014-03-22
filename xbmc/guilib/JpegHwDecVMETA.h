@@ -74,8 +74,6 @@ private:
 
   void ToBGRA(unsigned char *dst, unsigned int pitch, unsigned int width, unsigned int height);
   void ToRGB(unsigned char *dst, unsigned int pitch, unsigned int width, unsigned int height);
-
-  void SetHardwareClock(int clkRate);
 };
 
 
