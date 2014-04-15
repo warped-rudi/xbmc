@@ -214,7 +214,7 @@ unsigned int CAEConvert::S24LE4H_Float(uint8_t *data, const unsigned int samples
 {
   for (unsigned int i = 0; i < samples; ++i, data += 4)
   {
-    int s = (data[2] << 24) | (data[1] << 16) | (data[0] << 8);
+    int s = (data[3] << 24) | (data[2] << 16) | (data[1] << 8);
     *dest++ = (float)s * INT32_SCALE;
   }
   return samples;
