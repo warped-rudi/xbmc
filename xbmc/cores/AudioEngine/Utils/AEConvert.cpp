@@ -50,6 +50,13 @@
 
 #define INT32_SCALE (-1.0f / INT_MIN)
 
+// Windows expects the S24xE4 formats to be left justfied while Linux wants the way around...
+#if defined(TARGET_LINUX)
+#define S24NE4_LEFT_JUSTIFIED   0
+#else
+#define S24NE4_LEFT_JUSTIFIED   1
+#endif
+
 template <int L> inline int safeRound(float f, const float offset = 0.5)
 {
   double d = f * ((float)L + offset);
@@ -224,7 +231,11 @@ unsigned int CAEConvert::S24LE4_Float(uint8_t *data, const unsigned int samples,
 {
   for (unsigned int i = 0; i < samples; ++i, data += 4)
   {
+#if S24NE4_LEFT_JUSTIFIED
+    int s = (data[3] << 24) | (data[2] << 16) | (data[1] << 8);
+#else
     int s = (data[2] << 24) | (data[1] << 16) | (data[0] << 8);
+#endif
     *dest++ = (float)s * INT32_SCALE;
   }
   return samples;
@@ -234,7 +245,11 @@ unsigned int CAEConvert::S24BE4_Float(uint8_t *data, const unsigned int samples,
 {
   for (unsigned int i = 0; i < samples; ++i, data += 4)
   {
+#if S24NE4_LEFT_JUSTIFIED
     int s = (data[0] << 24) | (data[1] << 16) | (data[2] << 8);
+#else
+    int s = (data[1] << 24) | (data[2] << 16) | (data[3] << 8);
+#endif
     *dest++ = (float)s * INT32_SCALE;
   }
   return samples;
@@ -254,7 +269,7 @@ unsigned int CAEConvert::S24BE3_Float(uint8_t *data, const unsigned int samples,
 {
   for (unsigned int i = 0; i < samples; ++i, data += 3)
   {
-    int s = (data[1] << 24) | (data[2] << 16) | (data[3] << 8);
+    int s = (data[0] << 24) | (data[1] << 16) | (data[2] << 8);
     *dest++ = (float)s * INT32_SCALE;
   }
   return samples;
@@ -794,13 +809,20 @@ unsigned int CAEConvert::Float_S24NE4(float *data, const unsigned int samples, u
   int32_t *dst = (int32_t*)dest;
   #ifdef __SSE__
 
+  #if !(S24NE4_LEFT_JUSTIFIED)
+    const __m128i msk = _mm_set1_epi32(0xFFFFFF);
+  #endif
   const __m128 mul = _mm_set_ps1((float)INT24_MAX+.5f);
   unsigned int count = samples;
 
   /* work around invalid alignment */
   while ((((uintptr_t)data & 0xF) || ((uintptr_t)dest & 0xF)) && count > 0)
   {
-    dst[0] = safeRound<INT24_MAX>(data[0]);
+    #if S24NE4_LEFT_JUSTIFIED
+      dst[0] = safeRound<INT24_MAX>(data[0]) << 8;
+    #else
+      dst[0] = safeRound<INT24_MAX>(data[0]);
+    #endif
     ++data;
     ++dst;
     --count;
@@ -811,7 +833,11 @@ unsigned int CAEConvert::Float_S24NE4(float *data, const unsigned int samples, u
   {
     __m128  in  = _mm_mul_ps(_mm_load_ps(data), mul);
     __m128i con = _mm_cvtps_epi32(in);
-    con         = _mm_slli_epi32(con, 8);
+    #if S24NE4_LEFT_JUSTIFIED
+      con       = _mm_slli_epi32(con, 8);
+    #else
+      con       = _mm_and_si128(con, msk);
+    #endif
     memcpy(dst, &con, sizeof(int32_t) * 4);
   }
 
@@ -819,7 +845,11 @@ unsigned int CAEConvert::Float_S24NE4(float *data, const unsigned int samples, u
   {
     const uint32_t odd = samples - even;
     if (odd == 1)
+    #if S24NE4_LEFT_JUSTIFIED
+      dst[0] = safeRound<INT24_MAX>(data[0]) << 8;
+    #else
       dst[0] = safeRound<INT24_MAX>(data[0]);
+    #endif
     else
     {
       __m128 in;
@@ -827,8 +857,12 @@ unsigned int CAEConvert::Float_S24NE4(float *data, const unsigned int samples, u
       {
         in = _mm_setr_ps(data[0], data[1], 0, 0);
         in = _mm_mul_ps(in, mul);
-        __m64 con = _mm_cvtps_pi32(in);
-        con       = _mm_slli_pi32(con, 8);
+        __m128i con = _mm_cvtps_epi32(in);
+        #if S24NE4_LEFT_JUSTIFIED
+          con       = _mm_slli_epi32(con, 8);
+        #else
+          con       = _mm_and_si128(con, msk);
+        #endif
         memcpy(dst, &con, sizeof(int32_t) * 2);
       }
       else
@@ -836,7 +870,11 @@ unsigned int CAEConvert::Float_S24NE4(float *data, const unsigned int samples, u
         in = _mm_setr_ps(data[0], data[1], data[2], 0);
         in = _mm_mul_ps(in, mul);
         __m128i con = _mm_cvtps_epi32(in);
-        con         = _mm_slli_epi32(con, 8);
+        #if S24NE4_LEFT_JUSTIFIED
+          con       = _mm_slli_epi32(con, 8);
+        #else
+          con       = _mm_and_si128(con, msk);
+        #endif
         memcpy(dst, &con, sizeof(int32_t) * 3);
       }
     }
@@ -844,7 +882,13 @@ unsigned int CAEConvert::Float_S24NE4(float *data, const unsigned int samples, u
   _mm_empty();
   #else /* no SSE */
   for (uint32_t i = 0; i < samples; ++i)
-    *dst++ = safeRound<INT24_MAX>(*data++) & 0x00FFFFFF;
+  {
+    #if S24NE4_LEFT_JUSTIFIED
+      *dst++ = safeRound<INT24_MAX>(*data++) << 8;
+    #else
+      *dst++ = safeRound<INT24_MAX>(*data++);
+    #endif
+  }
   #endif
 
   return samples << 2;
@@ -893,7 +937,7 @@ unsigned int CAEConvert::Float_S24NE3(float *data, const unsigned int samples, u
   {
     const uint32_t odd = samples - even;
     if (odd == 1)
-      dst[0] = safeRound<INT24_MAX>(data[0]) & 0x00FFFFFF;
+      dst[0] = (safeRound<INT24_MAX>(data[0]) & 0x00FFFFFF) << leftShift;
     else
     {
       __m128 in;
