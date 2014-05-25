@@ -1080,6 +1080,7 @@ void CSettings::InitializeISettingCallbacks()
 
   settingSet.clear();
   settingSet.insert("videoscreen.fakefullscreen");
+  settingSet.insert("videoscreen.graphics_scaling");
   m_settingsManager->RegisterCallback(&g_graphicsContext, settingSet);
 
   settingSet.clear();

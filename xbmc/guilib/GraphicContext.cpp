@@ -80,6 +80,10 @@ void CGraphicContext::OnSettingChanged(const CSetting *setting)
     if (IsFullScreenRoot())
       SetVideoResolution(GetVideoResolution(), true);
   }
+  else if (settingId == "videoscreen.graphics_scaling")
+  {
+    SetVideoResolution(GetVideoResolution(), true);
+  }
 }
 
 void CGraphicContext::SetOrigin(float x, float y)
@@ -739,7 +743,7 @@ void CGraphicContext::SetResInfo(RESOLUTION res, const RESOLUTION_INFO& info)
 #ifdef HAS_MARVELL_DOVE
 GRAPHICS_SCALING CGraphicContext::getGraphicsScale()
 {
-  int value = -1; // g_guiSettings.GetInt("videoscreen.graphics_scaling");
+  int value = CSettings::Get().GetInt("videoscreen.graphics_scaling");
 
   return (value == -1) ? GR_SCALE_100 : (GRAPHICS_SCALING)value;
 }
