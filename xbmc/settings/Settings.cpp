@@ -701,6 +701,9 @@ bool CSettings::InitializeDefinitions()
 #elif defined(TARGET_RASPBERRY_PI)
   if (CFile::Exists(SETTINGS_XML_FOLDER "rbp.xml") && !Initialize(SETTINGS_XML_FOLDER "rbp.xml"))
     CLog::Log(LOGFATAL, "Unable to load rbp-specific settings definitions");
+#elif defined(TARGET_MARVELL_DOVE)
+  if (CFile::Exists(SETTINGS_XML_FOLDER "dove.xml") && !Initialize(SETTINGS_XML_FOLDER "dove.xml"))
+    CLog::Log(LOGFATAL, "Unable to load dove-specific settings definitions");
 #elif defined(TARGET_FREEBSD)
   if (CFile::Exists(SETTINGS_XML_FOLDER "freebsd.xml") && !Initialize(SETTINGS_XML_FOLDER "freebsd.xml"))
     CLog::Log(LOGFATAL, "Unable to load freebsd-specific settings definitions");

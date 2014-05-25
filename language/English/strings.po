@@ -15497,3 +15497,52 @@ msgstr ""
 msgctxt "#37024"
 msgid "Select this if the audio out connection only supports multichannel audio as Dolby Digital 5.1, this allows multichannel audio such as AAC5.1 or FLAC5.1 to be listened to in 5.1 surround sound. Note - Not recommended on Pi as this requires a lot of CPU."
 msgstr ""
+
+#: system/settings/dove.xml
+msgctxt "#38000"
+msgid "Vmeta clock speed"
+msgstr ""
+
+msgctxt "#38001"
+msgid "500 MHz"
+msgstr ""
+
+msgctxt "#38002"
+msgid "667 MHz"
+msgstr ""
+
+msgctxt "#38003"
+msgid "Set clock rate of the video processing unit. Values above 500 MHz are not guaranteed to work."
+msgstr ""
+
+msgctxt "#38010"
+msgid "Graphics scaling"
+msgstr ""
+
+msgctxt "#38011"
+msgid "No GUI upscaling"
+msgstr ""
+
+msgctxt "#38012"
+msgid "Upscale GUI by factor 1.5"
+msgstr ""
+
+msgctxt "#38013"
+msgid "Upscale GUI by factor 2"
+msgstr ""
+
+msgctxt "#38014"
+msgid "Upscale GUI by factor 2.5"
+msgstr ""
+
+msgctxt "#38015"
+msgid "Set scaling factor for rendering the GUI. Higher values increase the speed but lower the quality."
+msgstr ""
+
+msgctxt "#38020"
+msgid "Enable hardware JPEG decoding"
+msgstr ""
+
+msgctxt "#38021"
+msgid "Use the video processing uint for decoding JPEGs. This increases the speed but may lower the quality."
+msgstr ""
