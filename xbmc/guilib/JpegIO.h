@@ -30,6 +30,8 @@
 #include "utils/StdString.h"
 #include "iimage.h"
 
+class CJpegHwDec;
+
 class CJpegIO : public IImage
 {
 
@@ -53,6 +55,9 @@ protected:
   static  void   jpeg_error_exit(j_common_ptr cinfo);
 
   static unsigned int   GetExifOrientation(unsigned char* exif_data, unsigned int exif_data_size);
+
+  CJpegHwDec     *m_hwDec;
+  unsigned int   m_headerSize;
 
   unsigned char  *m_inputBuff;
   unsigned int   m_inputBuffSize;
