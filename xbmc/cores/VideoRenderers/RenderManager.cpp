@@ -42,7 +42,11 @@
 #if defined(HAS_GL)
   #include "LinuxRendererGL.h"
 #elif HAS_GLES == 2
+#ifdef ALLWINNERA10
+  #include "LinuxRendererA10.h"
+#else
   #include "LinuxRendererGLES.h"
+#endif
 #elif defined(HAS_DX)
   #include "WinRenderer.h"
 #elif defined(HAS_SDL)
@@ -417,7 +421,11 @@ unsigned int CXBMCRenderManager::PreInit()
 #if defined(HAS_GL)
     m_pRenderer = new CLinuxRendererGL();
 #elif HAS_GLES == 2
+#ifdef ALLWINNERA10
+    m_pRenderer = new CLinuxRendererA10();
+#else
     m_pRenderer = new CLinuxRendererGLES();
+#endif
 #elif defined(HAS_DX)
     m_pRenderer = new CWinRenderer();
 #elif defined(HAS_SDL)
@@ -929,6 +937,10 @@ int CXBMCRenderManager::AddVideoPicture(DVDVideoPicture& pic)
 #if defined(TARGET_ANDROID)
   else if(pic.format == RENDER_FMT_MEDIACODEC)
     m_pRenderer->AddProcessor(pic.mediacodec, index);
+#endif
+#ifdef ALLWINNERA10
+  else if (pic.format == RENDER_FMT_A10BUF)
+    m_pRenderer->AddProcessor(pic.a10buffer);
 #endif
 
   m_pRenderer->ReleaseImage(index, false);
