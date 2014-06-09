@@ -90,7 +90,7 @@ const CSysData &CSysInfoJob::GetData() const
 CStdString CSysInfoJob::GetCPUFreqInfo()
 {
   double CPUFreq = GetCPUFrequency();
-  return StringUtils::Format("%4.2fMHz", CPUFreq);;
+  return (CPUFreq > 0) ?  StringUtils::Format("%4.2fMHz", CPUFreq) : CStdString();
 }
 
 CSysData::INTERNET_STATE CSysInfoJob::GetInternetState()
