@@ -47,5 +47,9 @@ case $use_platform in
   raspberry-pi)
      AC_SUBST(ARCH_DEFINES, "-DTARGET_POSIX -DTARGET_LINUX -D_LINUX -D_ARMEL -DTARGET_RASPBERRY_PI")
      ;;
+     
+  allwinner-a10)
+     AC_SUBST(ARCH_DEFINES, "-DTARGET_POSIX -DTARGET_LINUX -D_LINUX -D__ARM_NEON__ -DALLWINNERA10")
+     ;;
 esac
 ])
