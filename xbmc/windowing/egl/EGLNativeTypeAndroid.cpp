@@ -28,15 +28,26 @@
   #if defined(HAS_AMLPLAYER) || defined(HAS_LIBAMCODEC)
     #include "utils/AMLUtils.h"
   #endif
+  #ifdef ALLWINNERA10
+    #include "cores/VideoRenderers/LinuxRendererA10.h"
+  #endif
 #endif
 #include "utils/StringUtils.h"
 
 CEGLNativeTypeAndroid::CEGLNativeTypeAndroid()
 {
+#if defined(ALLWINNERA10) && defined(TARGET_ANDROID)
+  int width, height;
+
+  A10VLInit(width, height);
+#endif
 }
 
 CEGLNativeTypeAndroid::~CEGLNativeTypeAndroid()
 {
+#if defined(ALLWINNERA10) && defined(TARGET_ANDROID)
+  A10VLExit();
+#endif
 } 
 
 bool CEGLNativeTypeAndroid::CheckCompatibility()
