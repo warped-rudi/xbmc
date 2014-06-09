@@ -91,6 +91,10 @@ struct DVDVideoPicture
     struct {
       CDVDMediaCodecInfo *mediacodec;
     };
+
+    struct {
+      struct _IppVideoPicture *vmeta;
+    };
   };
 
   unsigned int iFlags;

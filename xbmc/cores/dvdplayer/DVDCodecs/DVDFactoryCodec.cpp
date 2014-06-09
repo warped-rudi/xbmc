@@ -34,6 +34,7 @@
 #endif
 #include "Video/DVDVideoCodecFFmpeg.h"
 #include "Video/DVDVideoCodecOpenMax.h"
+#include "Video/DVDVideoCodecVMETA.h"
 #include "Video/DVDVideoCodecLibMpeg2.h"
 #include "Video/DVDVideoCodecStageFright.h"
 #if defined(HAVE_LIBCRYSTALHD)
@@ -191,8 +192,17 @@ CDVDVideoCodec* CDVDFactoryCodec::CreateVideoCodec(CDVDStreamInfo &hint, unsigne
 #elif defined(TARGET_POSIX) && !defined(TARGET_DARWIN)
   hwSupport += "VAAPI:no ";
 #endif
+#if defined(HAS_MARVELL_DOVE)
+  hwSupport += "VMETA:yes ";
+#else
+  hwSupport += "VMETA:no ";
+#endif
 
   CLog::Log(LOGDEBUG, "CDVDFactoryCodec: compiled in hardware support: %s", hwSupport.c_str());
+#if defined(HAS_MARVELL_DOVE)
+  CLog::Log(LOGINFO, "Trying VMETA Video Decoder...");
+  if ( (pCodec = OpenCodec(new CDVDVideoCodecVMETA(), hint, options)) ) return pCodec;
+#endif
 
   if (hint.stills && (hint.codec == AV_CODEC_ID_MPEG2VIDEO || hint.codec == AV_CODEC_ID_MPEG1VIDEO))
   {
