@@ -40,6 +40,9 @@
 
 #if defined(TARGET_POSIX) && !defined(TARGET_DARWIN) && !defined(TARGET_ANDROID)
 #include <X11/Xlib.h>
+#ifndef Status
+#define Status int
+#endif
 #include <X11/XKBlib.h>
 #include "input/XBMC_keysym.h"
 #include "utils/log.h"
