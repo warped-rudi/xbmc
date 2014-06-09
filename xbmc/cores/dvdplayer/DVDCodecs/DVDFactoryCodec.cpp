@@ -47,6 +47,9 @@
 #include "Video/DVDVideoCodecAndroidMediaCodec.h"
 #include "android/activity/AndroidFeatures.h"
 #endif
+#ifdef ALLWINNERA10
+#include "Video/DVDVideoCodecA10.h"
+#endif
 #include "Audio/DVDAudioCodecFFmpeg.h"
 #include "Audio/DVDAudioCodecLibMad.h"
 #include "Audio/DVDAudioCodecPcm.h"
@@ -299,6 +302,10 @@ CDVDVideoCodec* CDVDFactoryCodec::CreateVideoCodec(CDVDStreamInfo &hint, unsigne
         break;
     }
   }
+#endif
+
+#ifdef ALLWINNERA10
+  if ( (pCodec = OpenCodec(new CDVDVideoCodecA10(), hint, options)) ) return pCodec;
 #endif
 
   // try to decide if we want to try halfres decoding

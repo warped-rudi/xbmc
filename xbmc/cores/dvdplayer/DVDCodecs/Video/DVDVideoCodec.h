@@ -47,6 +47,7 @@ namespace VDPAU { class CVdpauRenderPicture; }
 class COpenMax;
 class COpenMaxVideo;
 struct OpenMaxVideoBuffer;
+struct A10VLQueueItem;
 class CDVDVideoCodecStageFright;
 class CDVDMediaCodecInfo;
 typedef void* EGLImageKHR;
@@ -90,6 +91,10 @@ struct DVDVideoPicture
 
     struct {
       CDVDMediaCodecInfo *mediacodec;
+    };
+
+    struct {
+      A10VLQueueItem *a10buffer;
     };
   };
 

@@ -191,6 +191,11 @@ bool CDVDPlayerVideo::OpenStream( CDVDStreamInfo &hint )
 #endif
 
 
+#ifdef ALLWINNERA10
+  if (m_pVideoCodec && (strcmp(m_pVideoCodec->GetName(), "A10") == 0))
+    m_pVideoCodec->Dispose();
+#endif
+
   CLog::Log(LOGNOTICE, "Creating video codec with codec id: %i", hint.codec);
   CDVDVideoCodec* codec = CDVDFactoryCodec::CreateVideoCodec(hint, surfaces, formats);
   if(!codec)
@@ -980,6 +985,9 @@ static std::string GetRenderFormatName(ERenderFormat format)
 {
   switch(format)
   {
+#ifdef ALLWINNERA10
+    case RENDER_FMT_A10BUF:    return "A10BUF";
+#endif
     case RENDER_FMT_YUV420P:   return "YV12";
     case RENDER_FMT_YUV420P16: return "YV12P16";
     case RENDER_FMT_YUV420P10: return "YV12P10";
