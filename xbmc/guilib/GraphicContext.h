@@ -126,6 +126,10 @@ public:
   const RESOLUTION_INFO GetResInfo(RESOLUTION res) const;
   void SetResInfo(RESOLUTION res, const RESOLUTION_INFO& info);
 
+#ifdef HAS_MARVELL_DOVE
+  static GRAPHICS_SCALING getGraphicsScale();
+#endif
+
   /* \brief Get UI scaling information from a given resolution to the screen resolution.
    Takes account of overscan and UI zooming.
    \param res the resolution to scale from.
