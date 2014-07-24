@@ -86,6 +86,8 @@ CLinuxRendererGLES::YUVBUFFER::YUVBUFFER()
   memset(&fields, 0, sizeof(fields));
   memset(&image , 0, sizeof(image));
   flipindex = 0;
+  userData = 0;
+
 #ifdef HAVE_LIBOPENMAX
   openMaxBuffer = NULL;
 #endif

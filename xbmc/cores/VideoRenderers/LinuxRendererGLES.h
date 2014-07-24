@@ -89,7 +89,8 @@ enum RenderMethod
   RENDER_CVREF  = 0x080,
   RENDER_BYPASS = 0x100,
   RENDER_EGLIMG = 0x200,
-  RENDER_MEDIACODEC = 0x400
+  RENDER_MEDIACODEC = 0x400,
+  RENDER_USERDATA   = 0x800
 };
 
 enum RenderQuality
@@ -273,6 +274,8 @@ protected:
     YUVFIELDS fields;
     YV12Image image;
     unsigned  flipindex; /* used to decide if this has been uploaded */
+
+    void *userData;
 
 #ifdef HAVE_LIBOPENMAX
     OpenMaxVideoBuffer *openMaxBuffer;
