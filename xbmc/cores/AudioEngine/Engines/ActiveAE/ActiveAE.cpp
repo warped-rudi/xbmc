@@ -2843,6 +2843,11 @@ AEAudioFormat CActiveAE::GetCurrentSinkFormat()
 void CActiveAE::OnLostDisplay()
 {
   Message *reply;
+  for(auto &&stream : m_streams)
+    m_controlPort.SendOutMessageSync(CActiveAEControlProtocol::PAUSESTREAM,
+                                                &reply, 1000,
+                                                &stream, sizeof(CActiveAEStream*));
+
   if (m_controlPort.SendOutMessageSync(CActiveAEControlProtocol::DISPLAYLOST,
                                                  &reply,
                                                  5000))
@@ -2862,7 +2867,12 @@ void CActiveAE::OnLostDisplay()
 
 void CActiveAE::OnResetDisplay()
 {
-  m_controlPort.SendOutMessage(CActiveAEControlProtocol::DISPLAYRESET);
+  Message *reply;
+  m_controlPort.SendOutMessageSync(CActiveAEControlProtocol::DISPLAYRESET, &reply, 1000);
+  for(auto &&stream : m_streams)
+    m_controlPort.SendOutMessageSync(CActiveAEControlProtocol::RESUMESTREAM,
+                                                &reply, 1000,
+                                                &stream, sizeof(CActiveAEStream*));
 }
 
 void CActiveAE::OnAppFocusChange(bool focus)
