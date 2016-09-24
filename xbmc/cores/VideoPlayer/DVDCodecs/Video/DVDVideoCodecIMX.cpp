@@ -1180,7 +1180,7 @@ CDVDVideoCodecIMXBuffer::CDVDVideoCodecIMXBuffer(VpuDecOutFrameInfo *frameInfo, 
   iWidth      = frameInfo->pExtInfo->nFrmWidth;
   iHeight     = frameInfo->pExtInfo->nFrmHeight;
   pVirtAddr   = m_frameBuffer->pbufVirtY;
-  pPhysAddr   = (int)m_frameBuffer->pbufY;
+  pPhysAddr   = (uint32_t)m_frameBuffer->pbufY;
 
 #ifdef IMX_INPUT_FORMAT_I420
   iFormat     = _4CC('I', '4', '2', '0');
