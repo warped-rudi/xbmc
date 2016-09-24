@@ -97,7 +97,6 @@ void CEGLNativeTypeIMX::Initialize()
     }
   }
 
-  g_Windowing.old();
   ShowWindow(false);
 
   fd = open("/dev/fb0",O_RDWR);
@@ -133,8 +132,6 @@ void CEGLNativeTypeIMX::Initialize()
   m_sar = GetMonitorSAR();
   g_IMXContext.create();
   ShowWindow(true);
-
-  g_Windowing.ord();
 #endif
   return;
 }

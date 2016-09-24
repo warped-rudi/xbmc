@@ -264,21 +264,6 @@ bool CWinSystemEGL::DestroyWindowSystem()
   return true;
 }
 
-void CWinSystemEGL::old()
-{
-  CSingleLock lock(m_resourceSection);
-  for (std::vector<IDispResource *>::iterator i = m_resources.begin(); i != m_resources.end(); ++i)
-    (*i)->OnLostDisplay();
-}
-
-void CWinSystemEGL::ord()
-{
-  CSingleLock lock(m_resourceSection);
-  // tell any shared resources
-  for (std::vector<IDispResource *>::iterator i = m_resources.begin(); i != m_resources.end(); ++i)
-    (*i)->OnResetDisplay();
-}
-
 bool CWinSystemEGL::CreateNewWindow(const std::string& name, bool fullScreen, RESOLUTION_INFO& res, PHANDLE_EVENT_FUNC userFunction)
 {
   RESOLUTION_INFO current_resolution;
@@ -309,7 +294,11 @@ bool CWinSystemEGL::CreateNewWindow(const std::string& name, bool fullScreen, RE
     m_dispResetTimer.Set(delay * 100);
   }
 
-  old();
+  {
+    CSingleLock lock(m_resourceSection);
+    for (std::vector<IDispResource *>::iterator i = m_resources.begin(); i != m_resources.end(); ++i)
+      (*i)->OnLostDisplay();
+  }
 
   m_stereo_mode = stereo_mode;
   m_bFullScreen   = fullScreen;
@@ -326,7 +315,12 @@ bool CWinSystemEGL::CreateNewWindow(const std::string& name, bool fullScreen, RE
   }
 
   if (!m_delayDispReset)
-    ord(); 
+  {
+    CSingleLock lock(m_resourceSection);
+    // tell any shared resources
+    for (std::vector<IDispResource *>::iterator i = m_resources.begin(); i != m_resources.end(); ++i)
+      (*i)->OnResetDisplay();
+  }
 
   Show();
   return true;
@@ -463,7 +457,10 @@ void CWinSystemEGL::PresentRenderImpl(bool rendered)
   if (m_delayDispReset && m_dispResetTimer.IsTimePast())
   {
     m_delayDispReset = false;
-    ord();
+    CSingleLock lock(m_resourceSection);
+    // tell any shared resources
+    for (std::vector<IDispResource *>::iterator i = m_resources.begin(); i != m_resources.end(); ++i)
+      (*i)->OnResetDisplay();
   }
   if (!rendered)
     return;
