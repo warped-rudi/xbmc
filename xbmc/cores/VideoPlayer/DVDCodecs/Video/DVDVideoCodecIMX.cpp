@@ -872,7 +872,7 @@ void CIMXCodec::Process()
   {
     RecycleFrameBuffers();
     SAFE_DELETE(task);
-    if (!(task = m_decInput.pop()))
+    if (!m_decInput.pop(task))
       task = new VPUTask();
 
 #if defined(IMX_PROFILE) || defined(IMX_PROFILE_BUFFERS)
@@ -1035,7 +1035,11 @@ void CIMXCodec::Process()
 
       if (m_decRet & VPU_DEC_NO_ENOUGH_BUF && m_decOutput.size())
       {
-        m_decOutput.pop()->Release();
+        CDVDVideoCodecIMXBuffer *buffer;
+
+        if (m_decOutput.pop(buffer))
+          buffer->Release();
+
         FlushVPU();
         continue;
       }
@@ -1111,8 +1115,13 @@ void CIMXCodec::ExitError(const char *msg, ...)
 
 bool CIMXCodec::GetPicture(DVDVideoPicture* pDvdVideoPicture)
 {
-  CDVDVideoCodecIMXBuffer *pIMXBuffer = m_decOutput.pop();
-  assert(pIMXBuffer);
+  CDVDVideoCodecIMXBuffer *pIMXBuffer;
+
+  if( !m_decOutput.pop(pIMXBuffer))
+  {
+    memset(pDvdVideoPicture, 0, sizeof(*pDvdVideoPicture));
+    return false;
+  }
 
 #ifdef IMX_PROFILE
   static unsigned int previous = 0;
