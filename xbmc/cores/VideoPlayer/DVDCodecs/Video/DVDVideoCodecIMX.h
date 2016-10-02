@@ -237,8 +237,6 @@ public:
 // Base class of IMXVPU and IMXIPU buffer
 class CDVDVideoCodecIMXBuffer : public CIMXBuffer
 {
-friend class CIMXCodec;
-friend class CIMXContext;
 public:
   CDVDVideoCodecIMXBuffer(VpuDecOutFrameInfo *frameInfo, double fps, int map);
   virtual ~CDVDVideoCodecIMXBuffer();
@@ -261,11 +259,15 @@ public:
 #endif
   VpuFieldType          GetFieldType() const    { return m_fieldType; }
 
-protected:
+  unsigned int          GetPictureWidth()       { return m_pctWidth; }
+  unsigned int          GetPictureHeight()      { return m_pctHeight; }
+
+  void                  SetConvBuffer(struct g2d_buf *b) { m_convBuffer = b; }
+
+private:
   unsigned int             m_pctWidth;
   unsigned int             m_pctHeight;
 
-private:
   double                   m_pts;
   double                   m_dts;
   VpuFieldType             m_fieldType;
@@ -275,8 +277,6 @@ private:
   unsigned char            m_idx;
   static unsigned char     i;
 #endif
-
-public:
   struct g2d_buf          *m_convBuffer;
 };
 
