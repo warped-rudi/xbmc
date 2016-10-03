@@ -386,6 +386,7 @@ protected:
   int                          m_speed;
   CCriticalSection             m_signalLock;
   CCriticalSection             m_queuesLock;
+  int                          m_forcedWidthHeightRatio;
 #ifdef DUMP_STREAM
   FILE                        *m_dump;
 #endif
