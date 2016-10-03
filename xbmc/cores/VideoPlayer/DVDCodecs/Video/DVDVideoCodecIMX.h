@@ -268,12 +268,14 @@ public:
 
   unsigned int          GetPictureWidth()       { return m_pctWidth; }
   unsigned int          GetPictureHeight()      { return m_pctHeight; }
+  int                   GetWidthHeightRatio()   { return m_widthHeightRatio; }
 
   void                  SetConvBuffer(struct g2d_buf *b) { m_convBuffer = b; }
 
 private:
   unsigned int             m_pctWidth;
   unsigned int             m_pctHeight;
+  int                      m_widthHeightRatio;
 
   double                   m_pts;
   double                   m_dts;
@@ -378,7 +380,6 @@ protected:
   std::unordered_map<VpuFrameBuffer*,double>
                                m_pts;
   double                       m_lastPTS;
-  VpuDecOutFrameInfo           m_frameInfo;         // Store last VPU output frame info
   CBitstreamConverter         *m_converter;         // H264 annex B converter
   bool                         m_warnOnce;          // Track warning messages to only warn once
   int                          m_codecControlFlags;

@@ -842,6 +842,7 @@ void CIMXCodec::AddExtraData(VpuBufferNode *bn, bool force)
 void CIMXCodec::Process()
 {
   VpuDecFrameLengthInfo         frameLengthInfo;
+  VpuDecOutFrameInfo            frameInfo;
   VpuBufferNode                 inData;
   VpuBufferNode                 dummy;
   VpuDecRetCode                 ret;
@@ -987,20 +988,20 @@ void CIMXCodec::Process()
         if (!VPU_DecGetConsumedFrameInfo(m_vpuHandle, &frameLengthInfo) && frameLengthInfo.pFrame)
           m_pts[frameLengthInfo.pFrame] = task->demux.pts;
 
-      if (m_decRet & CLASS_PICTURE && getOutputFrame(&m_frameInfo))
+      if (m_decRet & CLASS_PICTURE && getOutputFrame(&frameInfo))
       {
         // Some codecs (VC1?) lie about their frame size (mod 16). Adjust...
-        m_frameInfo.pExtInfo->nFrmWidth  = (((m_frameInfo.pExtInfo->nFrmWidth) + 15) & ~15);
-        m_frameInfo.pExtInfo->nFrmHeight = (((m_frameInfo.pExtInfo->nFrmHeight) + 15) & ~15);
+        frameInfo.pExtInfo->nFrmWidth  = (((frameInfo.pExtInfo->nFrmWidth) + 15) & ~15);
+        frameInfo.pExtInfo->nFrmHeight = (((frameInfo.pExtInfo->nFrmHeight) + 15) & ~15);
 
         ++m_nrOut;
-        CDVDVideoCodecIMXBuffer *buffer = new CDVDVideoCodecIMXBuffer(&m_frameInfo, m_fps, m_decOpenParam.nMapType);
+        CDVDVideoCodecIMXBuffer *buffer = new CDVDVideoCodecIMXBuffer(&frameInfo, m_fps, m_decOpenParam.nMapType);
 
         /* quick & dirty fix to get proper timestamping for VP8 codec */
         if (m_decOpenParam.CodecFormat == VPU_V_VP8)
           buffer->SetPts(task->demux.pts);
         else
-          buffer->SetPts(m_pts[m_frameInfo.pDisplayFrameBuf]);
+          buffer->SetPts(m_pts[frameInfo.pDisplayFrameBuf]);
 
         buffer->SetDts(task->demux.dts);
 
@@ -1154,7 +1155,7 @@ bool CIMXCodec::GetPicture(DVDVideoPicture* pDvdVideoPicture)
   pDvdVideoPicture->iWidth = pIMXBuffer->GetPictureWidth();
   pDvdVideoPicture->iHeight = pIMXBuffer->GetPictureHeight();
 
-  pDvdVideoPicture->iDisplayWidth = ((pDvdVideoPicture->iWidth * m_frameInfo.pExtInfo->nQ16ShiftWidthDivHeightRatio) + 32767) >> 16;
+  pDvdVideoPicture->iDisplayWidth = ((pDvdVideoPicture->iWidth * pIMXBuffer->GetWidthHeightRatio()) + 32767) >> 16;
   pDvdVideoPicture->iDisplayHeight = pDvdVideoPicture->iHeight;
 
   pDvdVideoPicture->pts = pIMXBuffer->GetPts();
@@ -1185,13 +1186,13 @@ CDVDVideoCodecIMXBuffer::CDVDVideoCodecIMXBuffer(VpuDecOutFrameInfo *frameInfo, 
   , m_iFlags(DVP_FLAG_DROPPED)
   , m_convBuffer(nullptr)
 {
-
-  m_pctWidth  = frameInfo->pExtInfo->FrmCropRect.nRight - frameInfo->pExtInfo->FrmCropRect.nLeft;
-  m_pctHeight = frameInfo->pExtInfo->FrmCropRect.nBottom - frameInfo->pExtInfo->FrmCropRect.nTop;
-  iWidth      = frameInfo->pExtInfo->nFrmWidth;
-  iHeight     = frameInfo->pExtInfo->nFrmHeight;
-  pVirtAddr   = m_frameBuffer->pbufVirtY;
-  pPhysAddr   = (uint32_t)m_frameBuffer->pbufY;
+  m_pctWidth         = frameInfo->pExtInfo->FrmCropRect.nRight - frameInfo->pExtInfo->FrmCropRect.nLeft;
+  m_pctHeight        = frameInfo->pExtInfo->FrmCropRect.nBottom - frameInfo->pExtInfo->FrmCropRect.nTop;
+  m_widthHeightRatio = frameInfo->pExtInfo->nQ16ShiftWidthDivHeightRatio;
+  iWidth             = frameInfo->pExtInfo->nFrmWidth;
+  iHeight            = frameInfo->pExtInfo->nFrmHeight;
+  pVirtAddr          = m_frameBuffer->pbufVirtY;
+  pPhysAddr          = (uint32_t)m_frameBuffer->pbufY;
 
 #ifdef IMX_INPUT_FORMAT_I420
   iFormat     = _4CC('I', '4', '2', '0');
