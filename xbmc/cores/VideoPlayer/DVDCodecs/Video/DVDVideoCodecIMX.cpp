@@ -770,7 +770,7 @@ int CIMXCodec::Decode(BYTE *pData, int iSize, double dts, double pts)
       else if (fd)
         m_fps = DVD_TIME_BASE / fd;
 
-      m_decOpenParam.nMapType = 1;
+      m_decOpenParam.nMapType = MAPTYPE_TILED_FRAME;
 
       ptrn.Flush();
       g_IMXCodec->Create();
@@ -951,9 +951,10 @@ void CIMXCodec::Process()
         if (!VpuFreeBuffers(false) || !VpuAllocFrameBuffers())
           ExitError("VPU error while registering frame buffers");
 
-        if (m_initInfo.nInterlace && m_fps >= 49 && !m_converter && m_decOpenParam.nMapType == 1)
+        if (m_initInfo.nInterlace && m_fps >= 49 &&
+            !m_converter && m_decOpenParam.nMapType == MAPTYPE_TILED_FRAME)
         {
-          m_decOpenParam.nMapType = 0;
+          m_decOpenParam.nMapType = MAPTYPE_LINEAR_FRAME;
           Dispose();
           VpuOpen();
           continue;
@@ -1177,7 +1178,7 @@ bool CIMXCodec::IsCurrentThread() const
 }
 
 /*******************************************/
-CDVDVideoCodecIMXBuffer::CDVDVideoCodecIMXBuffer(VpuDecOutFrameInfo *frameInfo, double fps, int map)
+CDVDVideoCodecIMXBuffer::CDVDVideoCodecIMXBuffer(VpuDecOutFrameInfo *frameInfo, double fps, int mapType)
   : m_dts(DVD_NOPTS_VALUE)
   , m_fieldType(frameInfo->eFieldType)
   , m_frameBuffer(frameInfo->pDisplayFrameBuf)
@@ -1195,9 +1196,9 @@ CDVDVideoCodecIMXBuffer::CDVDVideoCodecIMXBuffer(VpuDecOutFrameInfo *frameInfo, 
 #ifdef IMX_INPUT_FORMAT_I420
   iFormat     = _4CC('I', '4', '2', '0');
 #else
-  iFormat     = map == 1 ? _4CC('T', 'N', 'V', 'P'):
-                map == 0 ? _4CC('N', 'V', '1', '2'):
-                           _4CC('T', 'N', 'V', 'F');
+  iFormat     = mapType == MAPTYPE_TILED_FRAME  ? _4CC('T', 'N', 'V', 'P'):
+                mapType == MAPTYPE_LINEAR_FRAME ? _4CC('N', 'V', '1', '2'):
+                                                  _4CC('T', 'N', 'V', 'F');
 #endif
   m_fps       = fps;
 #if defined(IMX_PROFILE) || defined(IMX_PROFILE_BUFFERS) || defined(TRACE_FRAMES)
