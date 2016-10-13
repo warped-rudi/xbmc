@@ -393,13 +393,6 @@ bool CIMXCodec::VpuAllocFrameBuffers()
 #endif
     vpuFrameBuffer.pbufVirtMvCol      = ptrVirt + ySize + uSize + vSize;
 
-    if (i < 2)
-    {
-      memset(vpuFrameBuffer.pbufVirtY, 16, ySize);
-      memset(vpuFrameBuffer.pbufVirtCb, 128, uSize + vSize);
-      memset(vpuFrameBuffer.pbufVirtMvCol, 0, mvSize);
-    }
-
     m_vpuFrameBuffers.push_back(vpuFrameBuffer);
   }
 
