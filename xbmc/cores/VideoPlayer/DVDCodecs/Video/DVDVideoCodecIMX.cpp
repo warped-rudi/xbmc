@@ -1162,7 +1162,8 @@ bool CIMXCodec::GetPicture(DVDVideoPicture* pDvdVideoPicture)
       m_warnOnce = false;
       CLog::Log(LOGWARNING, "Interlaced content reported by VPU, but full frames detected - Please turn off deinterlacing manually.");
     }
-    else if (pBuffer->GetFieldType() == VPU_FIELD_TB || pBuffer->GetFieldType() == VPU_FIELD_TOP)
+
+    if (pBuffer->GetFieldType() != VPU_FIELD_BT && pBuffer->GetFieldType() != VPU_FIELD_BOTTOM)
       pDvdVideoPicture->iFlags |= DVP_FLAG_TOP_FIELD_FIRST;
 
     pDvdVideoPicture->iFlags |= DVP_FLAG_INTERLACED;
