@@ -124,7 +124,6 @@ CDVDVideoCodecVMETA::~CDVDVideoCodecVMETA()
 bool CDVDVideoCodecVMETA::Open(CDVDStreamInfo &hints, CDVDCodecOptions &options)
 {
   IppCodecStatus ret;
-  bool bSendCodecConfig = true;
 
   m_picture_width  = m_display_width  = hints.width;
   m_picture_height = m_display_height = hints.height;
@@ -188,7 +187,6 @@ bool CDVDVideoCodecVMETA::Open(CDVDStreamInfo &hints, CDVDCodecOptions &options)
       }
 
       m_VDecParSet.strm_fmt = IPP_VIDEO_STRM_FMT_H264;
-      bSendCodecConfig = false;
     }
     break;
 
@@ -290,8 +288,7 @@ bool CDVDVideoCodecVMETA::Open(CDVDStreamInfo &hints, CDVDCodecOptions &options)
   m_frame_no = 0;
   m_is_open = true;
 
-  if(bSendCodecConfig)
-    SendCodecConfig();
+  SendCodecConfig();
 
   CLog::Log(LOGDEBUG, "%s::%s - VMETA Decoder opened with codec : %s [%dx%d]",
             CLASSNAME, __func__, m_video_codec_name.c_str(), m_display_width, m_display_height);
