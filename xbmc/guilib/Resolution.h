@@ -63,6 +63,20 @@ enum VSYNC {
   VSYNC_DRIVER       =  3
 };
 
+#ifdef TARGET_MARVELL_DOVE
+enum VMETA_CLK {
+  VMETA_CLK_500      = 500,
+  VMETA_CLK_667      = 667
+};
+
+enum GRAPHICS_SCALING {
+  GR_SCALE_100       = 100,
+  GR_SCALE_150       = 150,
+  GR_SCALE_200       = 200,
+  GR_SCALE_250       = 250
+};
+#endif
+
 struct OVERSCAN
 {
   int left;
