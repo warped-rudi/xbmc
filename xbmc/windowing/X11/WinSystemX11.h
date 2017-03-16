@@ -31,6 +31,12 @@
 
 #if defined(HAS_EGL)
 #include <EGL/egl.h>
+
+#ifdef HAS_MARVELL_DOVE
+#define Status XStatus
+#define Always XAlways
+#endif
+
 #endif
 
 #include "windowing/WinSystem.h"
