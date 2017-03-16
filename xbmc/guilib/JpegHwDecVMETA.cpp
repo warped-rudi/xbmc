@@ -30,6 +30,7 @@
 #include "filesystem/File.h"
 #include "threads/SystemClock.h"
 #include "settings/Settings.h"
+#include "guilib/Resolution.h"
 
 #include "XBTF.h"
 #include "JpegHwDecVMETA.h"
@@ -364,11 +365,7 @@ bool CJpegHwDecVMeta::DecodePicture(unsigned int maxWidth,
             __FUNCTION__, maxWidth, maxHeight, scaleDivider);
 #endif
 
-#if 0
   DllLibVMETA::SetHardwareClock(CSettings::GetInstance().GetInt("videoscreen.vmeta_clk") == VMETA_CLK_667);
-#else
-  DllLibVMETA::SetHardwareClock(true);
-#endif
 
   do
   {

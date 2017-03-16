@@ -54,9 +54,7 @@ void CJpegHwDec::PrepareBuffer(unsigned int numBytes)
 CJpegHwDec *CJpegHwDec::create()
 {
 #if defined(HAS_MARVELL_DOVE)
-#if 0
   if (CSettings::GetInstance().GetBool("videoscreen.use_hardware_jpeg"))
-#endif
   {
     CJpegHwDec *d = new CJpegHwDecVMeta();
 

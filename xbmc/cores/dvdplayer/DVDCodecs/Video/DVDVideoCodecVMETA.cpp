@@ -109,11 +109,7 @@ CDVDVideoCodecVMETA::CDVDVideoCodecVMETA()
   m_low_delay         = -1;
   m_codec_species     = -1;
 
-#if 0
   DllLibVMETA::SetHardwareClock(CSettings::GetInstance().GetInt("videoscreen.vmeta_clk") == VMETA_CLK_667);
-#else
-  DllLibVMETA::SetHardwareClock(true);
-#endif
 }
 
 
