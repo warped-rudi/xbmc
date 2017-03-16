@@ -301,6 +301,15 @@ void CRenderer::Render(COverlay* o, float adjust_height)
   state.x += GetStereoscopicDepth();
   state.y += adjust_height;
 
+#ifdef HAS_MARVELL_DOVE
+  GRAPHICS_SCALING scale = g_graphicsContext.getGraphicsScale();
+
+  state.x = (state.x * 100) / scale;
+  state.y = (state.y * 100) / scale;
+  state.width = (state.width * 100) /scale;
+  state.height = (state.height *100) /scale;
+#endif
+
   o->Render(state);
 }
 

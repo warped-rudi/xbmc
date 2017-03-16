@@ -29,6 +29,8 @@
 #include <vector>
 #include <map>
 
+#include "guilib/Resolution.h"
+
 class XMode
 {
 public:
@@ -117,6 +119,9 @@ public:
   //bool Has1080p();
   //bool Has720p();
   //bool Has480p();
+#ifdef TARGET_MARVELL_DOVE
+  void SetGraphicsScaler(enum GRAPHICS_SCALING scale);
+#endif
 
 private:
   bool m_bInit;

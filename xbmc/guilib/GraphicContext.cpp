@@ -767,19 +767,40 @@ void CGraphicContext::SetResInfo(RESOLUTION res, const RESOLUTION_INFO& info)
   }
 }
 
+#ifdef HAS_MARVELL_DOVE
+GRAPHICS_SCALING CGraphicContext::getGraphicsScale()
+{
+  int value = -1; // g_guiSettings.GetInt("videoscreen.graphics_scaling");
+
+  return (value == -1) ? GR_SCALE_100 : (GRAPHICS_SCALING)value;
+}
+#endif
+
 void CGraphicContext::GetGUIScaling(const RESOLUTION_INFO &res, float &scaleX, float &scaleY, TransformMatrix *matrix /* = NULL */)
 {
   if (m_Resolution != RES_INVALID)
   {
     // calculate necessary scalings
     RESOLUTION_INFO info = GetResInfo();
+
+#ifdef HAS_MARVELL_DOVE
+    GRAPHICS_SCALING scale = getGraphicsScale();
+
+    float fFromWidth  = (float)res.iWidth;
+    float fFromHeight = (float)res.iHeight;
+    float fToPosX     = (float)(info.Overscan.left * 100) / scale;
+    float fToPosY     = (float)(info.Overscan.top * 100) / scale;
+    float fToWidth    = (float)(info.Overscan.right * 100) / scale  - fToPosX;
+    float fToHeight   = (float)(info.Overscan.bottom * 100) / scale - fToPosY;
+#else
     float fFromWidth  = (float)res.iWidth;
     float fFromHeight = (float)res.iHeight;
     float fToPosX     = (float)info.Overscan.left;
     float fToPosY     = (float)info.Overscan.top;
     float fToWidth    = (float)info.Overscan.right  - fToPosX;
     float fToHeight   = (float)info.Overscan.bottom - fToPosY;
-
+#endif
+    
     if(!g_guiSkinzoom) // lookup gui setting if we didn't have it already
       g_guiSkinzoom = (CSettingInt*)CSettings::GetInstance().GetSetting(CSettings::SETTING_LOOKANDFEEL_SKINZOOM);
 

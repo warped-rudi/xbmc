@@ -313,6 +313,11 @@ bool CWinSystemX11::SetFullScreen(bool fullScreen, RESOLUTION_INFO& res, bool bl
     }
   }
 
+#ifdef HAS_MARVELL_DOVE
+  if (m_mainWindow)
+    g_xrandr.SetGraphicsScaler(g_graphicsContext.getGraphicsScale());
+#endif
+
   if (!SetWindow(res.iWidth, res.iHeight, fullScreen, m_userOutput))
     return false;
 
