@@ -31,6 +31,8 @@
 #include "DynamicDll.h"
 
 #include "threads/SingleLock.h"
+#include "settings/Settings.h"
+#include "guilib/Resolution.h"
 #include "utils/log.h"
 #include "DVDClock.h"
 
@@ -44,7 +46,6 @@
 #define CLASSNAME "CDVDVideoCodecVMETA"
 
 #include "utils/BitstreamConverter.h"
-#include "settings/GUISettings.h"
 #include "DVDCodecs/DVDCodecs.h"
 
 
@@ -108,7 +109,11 @@ CDVDVideoCodecVMETA::CDVDVideoCodecVMETA()
   m_low_delay         = -1;
   m_codec_species     = -1;
 
-  DllLibVMETA::SetHardwareClock(g_guiSettings.GetInt("videoscreen.vmeta_clk") == VMETA_CLK_667);
+#if 0
+  DllLibVMETA::SetHardwareClock(CSettings::GetInstance().GetInt("videoscreen.vmeta_clk") == VMETA_CLK_667);
+#else
+  DllLibVMETA::SetHardwareClock(true);
+#endif
 }
 
 

@@ -26,13 +26,13 @@
 #undef __u8
 #undef byte
 
-#include "../../settings/VideoSettings.h"
-#include "../dvdplayer/DVDCodecs/Video/DVDVideoCodec.h"
-#include "../dvdplayer/DVDCodecs/Video/DllVMETA.h"
 #include "RenderFlags.h"
 #include "BaseRenderer.h"
-#include "settings/GUISettings.h"
 #include "settings/Settings.h"
+#include "settings/MediaSettings.h"
+#include "settings/DisplaySettings.h"
+#include "../dvdplayer/DVDCodecs/Video/DVDVideoCodec.h"
+#include "../dvdplayer/DVDCodecs/Video/DllVMETA.h"
 
 class CRenderCapture;
 class CBaseTexture;
@@ -136,7 +136,7 @@ public:
   CDoveOverlayRenderer();
   virtual ~CDoveOverlayRenderer();
 
-  virtual void Update(bool bPauseDrawing);
+  virtual void Update(bool bPauseDrawing = false);
   virtual void SetupScreenshot() {};
 
   bool RenderCapture(CRenderCapture* capture);
@@ -157,8 +157,9 @@ public:
   virtual void RenderUpdate(bool clear, DWORD flags = 0, DWORD alpha = 255);
 
   // Re-implemented CBaseRenderer function(s)
-  virtual bool AddVideoPicture(DVDVideoPicture* picture)
+  virtual bool AddVideoPicture(DVDVideoPicture* picture, int index)
   {
+    (void)index;
     DrawSlice(picture);
     return true;
   }

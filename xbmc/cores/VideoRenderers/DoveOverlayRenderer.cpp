@@ -81,21 +81,24 @@ void CDoveOverlayRenderer::ManageDisplay(bool first)
   CRect view;
   int interpolation = m_interpolation;
   struct _sOvlySurface overlaySurface = m_overlaySurface;
+  const CDisplaySettings& dispInfo = CDisplaySettings::GetInstance();
+  const RESOLUTION_INFO& resInfo = dispInfo.GetCurrentResolutionInfo();
+  const CVideoSettings& vidInfo = CMediaSettings::GetInstance().GetCurrentVideoSettings();
 
-  view.x1 = (float)g_settings.m_ResInfo[m_resolution].Overscan.left;
-  view.y1 = (float)g_settings.m_ResInfo[m_resolution].Overscan.top;
-  view.x2 = (float)g_settings.m_ResInfo[m_resolution].Overscan.right;
-  view.y2 = (float)g_settings.m_ResInfo[m_resolution].Overscan.bottom;
+  view.x1 = (float)resInfo.Overscan.left;
+  view.y1 = (float)resInfo.Overscan.top;
+  view.x2 = (float)resInfo.Overscan.right;
+  view.y2 = (float)resInfo.Overscan.bottom;
 
-  m_sourceRect.x1 = (float)g_settings.m_currentVideoSettings.m_CropLeft;
-  m_sourceRect.y1 = (float)g_settings.m_currentVideoSettings.m_CropTop;
-  m_sourceRect.x2 = (float)m_sourceWidth - g_settings.m_currentVideoSettings.m_CropRight;
-  m_sourceRect.y2 = (float)m_sourceHeight - g_settings.m_currentVideoSettings.m_CropBottom;
+  m_sourceRect.x1 = 0.0;
+  m_sourceRect.y1 = 0.0;
+  m_sourceRect.x2 = (float)m_sourceWidth;
+  m_sourceRect.y2 = (float)m_sourceHeight;
 
   CalcNormalDisplayRect(view.x1, view.y1,
                         view.Width(), view.Height(),
-                        GetAspectRatio() * g_settings.m_fPixelRatio,
-                        g_settings.m_fZoomAmount, g_settings.m_fVerticalShift);
+                        GetAspectRatio() * dispInfo.GetPixelRatio(),
+                        dispInfo.GetZoomAmount(), dispInfo.GetVerticalShift());
 
   OutputBuffer &currPict = m_SoftPicture[m_currentBuffer];
 
@@ -159,7 +162,7 @@ void CDoveOverlayRenderer::ManageDisplay(bool first)
 
   /* Rabeeh said: Scaler is set differently when using graphics scaler */
   m_interpolation = (g_graphicsContext.getGraphicsScale() == GR_SCALE_100 &&
-                      g_settings.m_currentVideoSettings.m_ScalingMethod != VS_SCALINGMETHOD_NEAREST) ?
+                      vidInfo.m_ScalingMethod != VS_SCALINGMETHOD_NEAREST) ?
                         DOVEFB_INTERPOLATION_BILINEAR : DOVEFB_INTERPOLATION_NONE;
   if (first || interpolation != m_interpolation)
   {
@@ -202,7 +205,7 @@ bool CDoveOverlayRenderer::Configure(
   // Calculate the input frame aspect ratio.
   CalculateFrameAspectRatio(d_width, d_height);
   ChooseBestResolution(fps);
-  SetViewMode(g_settings.m_currentVideoSettings.m_ViewMode);
+  SetViewMode(CMediaSettings::GetInstance().GetCurrentVideoSettings().m_ViewMode);
 
   /* Open the video overlay */
   m_overlayfd = open("/dev/fb1", O_RDWR);
@@ -264,7 +267,7 @@ unsigned int CDoveOverlayRenderer::PreInit()
 
   UnInit();
 
-  m_resolution = g_guiSettings.m_LookAndFeelResolution;
+  m_resolution = CDisplaySettings::GetInstance().GetCurrentResolution();
   if ( m_resolution == RES_WINDOW )
     m_resolution = RES_DESKTOP;
 
