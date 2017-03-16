@@ -46,6 +46,7 @@ class CMMALRenderer;
 class CLinuxRenderer;
 class CLinuxRendererGL;
 class CLinuxRendererGLES;
+class CDoveOverlayRenderer;
 
 class CXBMCRenderManager
 {
@@ -154,6 +155,8 @@ public:
   CLinuxRendererGL    *m_pRenderer;
 #elif defined(HAS_MMAL)
   CMMALRenderer       *m_pRenderer;
+#elif defined(HAS_MARVELL_DOVE)
+  CDoveOverlayRenderer *m_pRenderer;
 #elif HAS_GLES == 2
   CLinuxRendererGLES  *m_pRenderer;
 #elif defined(HAS_DX)

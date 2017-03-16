@@ -25,6 +25,8 @@
 #include "OverlayRendererGL.h"
 #ifdef HAS_GL
   #include "LinuxRendererGL.h"
+#elif defined(HAS_MARVELL_DOVE)
+  #include "DoveOverlayRenderer.h"
 #elif HAS_GLES == 2
   #include "LinuxRendererGLES.h"
 #endif
