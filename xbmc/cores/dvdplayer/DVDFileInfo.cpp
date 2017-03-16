@@ -206,6 +206,13 @@ bool CDVDFileInfo::ExtractThumb(const std::string &strPath,
     CDVDStreamInfo hint(*pDemuxer->GetStream(nVideoStream), true);
     hint.software = true;
 
+#if defined(TARGET_MARVELL_DOVE)
+    // VMETA Codec doesn't work for thumbs so use FFmpeg
+    {
+      CDVDCodecOptions dvdOptions;
+      pVideoCodec = CDVDFactoryCodec::OpenCodec(new CDVDVideoCodecFFmpeg(), hint, dvdOptions);
+    }
+#else
     if (hint.codec == AV_CODEC_ID_MPEG2VIDEO || hint.codec == AV_CODEC_ID_MPEG1VIDEO)
     {
       // libmpeg2 is not thread safe so use ffmepg for mpeg2/mpeg1 thumb extraction
@@ -216,6 +223,7 @@ bool CDVDFileInfo::ExtractThumb(const std::string &strPath,
     {
       pVideoCodec = CDVDFactoryCodec::CreateVideoCodec( hint );
     }
+#endif
 
     if (pVideoCodec)
     {
