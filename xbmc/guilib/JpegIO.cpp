@@ -26,6 +26,7 @@
 #include "utils/log.h"
 #include "XBTF.h"
 #include "JpegIO.h"
+#include "JpegHwDec.h"
 #include "utils/StringUtils.h"
 #include <setjmp.h>
 
@@ -229,8 +230,10 @@ static void x_jpeg_mem_dest (j_compress_ptr cinfo,
 
 CJpegIO::CJpegIO()
 {
+  m_hwDec  = CJpegHwDec::create();
   m_width  = 0;
   m_height = 0;
+  m_headerSize = 0;
   m_orientation = 0;
   m_inputBuffSize = 0;
   m_inputBuff = NULL;
@@ -241,11 +244,12 @@ CJpegIO::CJpegIO()
 CJpegIO::~CJpegIO()
 {
   Close();
+  CJpegHwDec::destroy(m_hwDec);
 }
 
 void CJpegIO::Close()
 {
-  free(m_inputBuff);
+  m_hwDec->FreeBuffer(m_inputBuff);
   m_inputBuff = NULL;
   m_inputBuffSize = 0;
   ReleaseThumbnailBuffer();
@@ -256,14 +260,7 @@ bool CJpegIO::Open(const std::string &texturePath, unsigned int minx, unsigned i
   Close();
 
   m_texturePath = texturePath;
-
-  XFILE::CFile file;
-  XFILE::auto_buffer buf;
-  if (file.LoadFile(texturePath, buf) <= 0)
-    return false;
-
-  m_inputBuffSize = buf.size();
-  m_inputBuff = (unsigned char*)buf.detach();
+  m_inputBuffSize = m_hwDec->LoadFile(texturePath, &m_inputBuff);
 
   return Read(m_inputBuff, m_inputBuffSize, minx, miny);
 }
@@ -318,13 +315,13 @@ bool CJpegIO::Read(unsigned char* buffer, unsigned int bufSize, unsigned int min
     m_cinfo.scale_denom = 8;
     m_cinfo.out_color_space = JCS_RGB;
     unsigned int maxtexsize = g_Windowing.GetMaxTextureSize();
-    for (unsigned int scale = 1; scale <= 8; scale++)
+    for (unsigned int scale = m_hwDec->FirstScale(); scale <= 8; scale = m_hwDec->NextScale(scale, +1) )
     {
       m_cinfo.scale_num = scale;
       jpeg_calc_output_dimensions(&m_cinfo);
       if ((m_cinfo.output_width > maxtexsize) || (m_cinfo.output_height > maxtexsize))
       {
-        m_cinfo.scale_num--;
+        m_cinfo.scale_num = m_hwDec->NextScale(scale, -1);
         break;
       }
       if (m_cinfo.output_width >= minx && m_cinfo.output_height >= miny)
@@ -336,6 +333,8 @@ bool CJpegIO::Read(unsigned char* buffer, unsigned int bufSize, unsigned int min
 
     if (m_cinfo.marker_list)
       m_orientation = GetExifOrientation(m_cinfo.marker_list->data, m_cinfo.marker_list->data_length);
+    
+    m_headerSize = bufSize - m_cinfo.src->bytes_in_buffer;
     return true;
   }
 }
@@ -343,9 +342,35 @@ bool CJpegIO::Read(unsigned char* buffer, unsigned int bufSize, unsigned int min
 bool CJpegIO::Decode(unsigned char* const pixels, unsigned int width, unsigned int height, unsigned int pitch, unsigned int format)
 {
   unsigned char *dst = (unsigned char*)pixels;
-  unsigned int copyWidth = std::min(m_width, width);
-  unsigned int copyHeight = std::min(m_height, height);
+  unsigned int featureFlags = 0;
 
+  if (m_cinfo.progressive_mode)
+    featureFlags |= CJpegHwDec::ffProgressive;
+  if (m_cinfo.arith_code)
+    featureFlags |= CJpegHwDec::ffArithmeticCoding;
+
+  if (m_hwDec->CanDecode(featureFlags,
+                         m_cinfo.image_width, m_cinfo.image_height) )
+  {
+    if (!m_inputBuff)
+    {
+      m_inputBuffSize = m_hwDec->LoadBuffer(
+                          m_cinfo.src->next_input_byte - m_headerSize,
+                          m_cinfo.src->bytes_in_buffer + m_headerSize,
+                          &m_inputBuff);
+    }
+
+    if (m_inputBuff &&
+        m_hwDec->Decode(dst, pitch, format,
+                        m_cinfo.output_width, m_cinfo.output_height,
+                        m_cinfo.scale_num, m_cinfo.scale_denom))
+    {
+      jpeg_destroy_decompress(&m_cinfo);
+      return true;
+    }
+  }
+
+  unsigned int copyHeight = std::min(m_height, height);
   struct my_error_mgr jerr;
   m_cinfo.err = jpeg_std_error(&jerr.pub);
   jerr.pub.error_exit = jpeg_error_exit;
@@ -377,6 +402,7 @@ bool CJpegIO::Decode(unsigned char* const pixels, unsigned int width, unsigned i
         dst += pitch;
       }
 #else
+      unsigned int copyWidth = std::min(m_width, width);
       unsigned char* row = new unsigned char[m_width * 3];
       while (m_cinfo.output_scanline < copyHeight)
       {
