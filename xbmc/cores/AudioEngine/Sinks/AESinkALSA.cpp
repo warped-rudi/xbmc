@@ -1545,6 +1545,10 @@ void CAESinkALSA::EnumerateDevice(AEDeviceInfoList &list, const std::string &dev
     {
       if (!AE_IS_RAW(i))
         continue;
+      
+      if (AE_IS_RAW_HD(i) && i != AE_FMT_EAC3)
+        continue;
+
       it = find(info.m_dataFormats.begin(), info.m_dataFormats.end(), i);
       if (it == info.m_dataFormats.end())
       {
