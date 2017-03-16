@@ -709,6 +709,25 @@ case $use_platform in
      CFLAGS="$CFLAGS"
      CXXFLAGS="$CXXFLAGS"
      ;;
+
+  marvell-dove)
+     target_platform=target_marvell_dove
+     use_x11=yes
+     use_sdl=yes
+     use_neon=no
+     use_arch="arm"
+     use_cpu=cortex-a9
+     use_hardcoded_tables="yes"
+     use_alsa="yes"
+     ARCH="arm"
+     AC_DEFINE(HAS_MARVELL_DOVE, [1], [Define if supporting Marvell Armada 510 (Dove)])
+     CFLAGS="$CFLAGS -Wno-psabi -Wa,-march=armv7a -mtune=cortex-a9 -mfpu=vfpv3-d16 -marm -O3 -ftree-vectorize"
+     CXXFLAGS="$CXXFLAGS -Wno-psabi -Wa,-march=armv7a -mtune=cortex-a9 -mfpu=vfpv3-d16 -marm -O3 -ftree-vectorize"
+     USE_MARVELL_DOVE=1
+     ;;
+
+  *)
+     use_alsa="yes"
 esac
 
 if test "$host_vendor" = "apple"; then
@@ -804,7 +823,8 @@ if test "$host_vendor" = "apple" ; then
     #arm/ios
     LIBS="$LIBS -framework CoreFoundation"
   fi
-elif test "$target_platform" = "target_raspberry_pi"; then
+elif test "$target_platform" = "target_raspberry_pi" || \
+     test "$target_platform" = "target_marvell_dove"; then
   ARCH="arm"
   use_arch="arm"
 elif test "$use_arch" = "arm"; then
@@ -1122,7 +1142,8 @@ int main() {
   )])
 AC_LANG_POP([C++])
 
-if test "${target_platform}" = "target_linux" || test "${target_platform}" = "target_raspberry_pi" || test "${target_platform}" = "target_android"; then
+if test "${target_platform}" = "target_linux" || test "${target_platform}" = "target_raspberry_pi" || \
+   test "${target_platform}" = "target_android" || test "${target_platform}" = "target_marvell_dove"; then
   PKG_CHECK_MODULES([UUID], [uuid],, AC_MSG_ERROR(libuuid not found))
 fi
 
@@ -2512,6 +2533,7 @@ AC_SUBST(USE_LIBNFS)
 AC_SUBST(USE_LIBGIF)
 AC_SUBST(USE_AIRPLAY)
 AC_SUBST(USE_OPENMAX)
+AC_SUBST(USE_MARVELL_DOVE)
 AC_SUBST(USE_PULSE)
 AC_SUBST(HAVE_LIBPULSE)
 AC_SUBST(USE_ALSA)
