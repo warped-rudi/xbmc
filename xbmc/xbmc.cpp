@@ -136,5 +136,10 @@ extern "C" int XBMC_Run(bool renderGUI)
   g_RBP.Deinitialize();
 #endif
 
+  // workaround for a bug in the Vivante gpu driver
+#if defined(TARGET_MARVELL_DOVE)
+  _exit(status);
+#else
   return status;
+#endif
 }
