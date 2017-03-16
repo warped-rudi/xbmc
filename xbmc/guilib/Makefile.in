@@ -64,6 +64,10 @@ SRCS += GUIWindowManager.cpp
 SRCS += GUIWrappingListContainer.cpp
 SRCS += imagefactory.cpp
 SRCS += IWindowManagerCallback.cpp
+SRCS += JpegHwDec.cpp
+ifeq (@USE_MARVELL_DOVE@,1)
+SRCS += JpegHwDecVMETA.cpp
+endif
 SRCS += JpegIO.cpp
 SRCS += LocalizeStrings.cpp
 SRCS += Shader.cpp
