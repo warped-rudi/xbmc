@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<settings>
+  <section id="system">
+    <category id="videoscreen">
+      <group id="1">
+        <setting id="videoscreen.fakefullscreen">
+          <visible>false</visible>
+        </setting>
+      </group>
+      <group id="3">
+        <setting id="videoscreen.vsync">
+          <default>3</default> <!-- VSYNC_DRIVER -->
+        </setting>
+      </group>
+      <group id="10">
+        <setting id="videoscreen.use_hardware_jpeg" type="boolean" label="38120" help="38121">
+          <level>1</level>
+          <default>false</default>
+          <control type="toggle" />
+        </setting>
+        <setting id="videoscreen.graphics_scaling" type="integer" label="38110" help="38115">
+          <level>2</level>
+          <default>100</default>
+          <constraints>
+            <options>
+              <option label="38111">100</option>
+              <option label="38112">150</option>
+              <option label="38113">200</option>
+              <option label="38114">250</option>
+            </options>
+          </constraints>
+          <control type="list" format="string" />
+        </setting>
+        <setting id="videoscreen.vmeta_clk" type="integer" label="38100" help="38103">
+          <level>3</level>
+          <default>667</default>
+          <constraints>
+            <options>
+              <option label="38101">500</option>
+              <option label="38102">667</option>
+            </options>
+          </constraints>
+          <control type="spinner" format="string" />
+        </setting>
+      </group>
+    </category>
+    <category id="input">
+      <group id="2">
+        <setting id="input.enablejoystick">
+          <requirement>HAS_SDL_JOYSTICK</requirement>
+          <level>0</level>
+          <default>false</default>
+        </setting>      
+      </group>
+    </category>
+  </section>
+</settings>

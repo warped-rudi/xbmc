@@ -18110,3 +18110,64 @@ msgstr ""
 msgctxt "#38023"
 msgid "Set my rating"
 msgstr ""
+
+#: system/settings/dove.xml
+msgctxt "#38100"
+msgid "VPU maximum clock speed"
+msgstr ""
+
+#: system/settings/dove.xml
+msgctxt "#38101"
+msgid "500 MHz"
+msgstr ""
+
+#: system/settings/dove.xml
+msgctxt "#38102"
+msgid "667 MHz"
+msgstr ""
+
+#: system/settings/dove.xml
+msgctxt "#38103"
+msgid "Set clock rate of the video processing unit. Values above 500 MHz are not guaranteed to work."
+msgstr ""
+
+#: system/settings/dove.xml
+msgctxt "#38110"
+msgid "Graphics scaling"
+msgstr ""
+
+#: system/settings/dove.xml
+msgctxt "#38111"
+msgid "No GUI upscaling"
+msgstr ""
+
+#: system/settings/dove.xml
+msgctxt "#38112"
+msgid "Upscale GUI by factor 1.5"
+msgstr ""
+
+#: system/settings/dove.xml
+msgctxt "#38113"
+msgid "Upscale GUI by factor 2"
+msgstr ""
+
+#: system/settings/dove.xml
+msgctxt "#38114"
+msgid "Upscale GUI by factor 2.5"
+msgstr ""
+
+#: system/settings/dove.xml
+msgctxt "#38115"
+msgid "Set scaling factor for rendering the GUI. Higher values increase the speed but lower the quality."
+msgstr ""
+
+#: system/settings/dove.xml
+msgctxt "#38120"
+msgid "Enable hardware JPEG decoding"
+msgstr ""
+
+#: system/settings/dove.xml
+msgctxt "#38121"
+msgid "Use the video processing unit to decode JPEG pictures. This increases the speed but may lower the quality."
+msgstr ""
+
