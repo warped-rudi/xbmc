@@ -37,6 +37,9 @@
 #include "Video/DVDVideoCodecFFmpeg.h"
 #include "Video/DVDVideoCodecOpenMax.h"
 #include "Video/DVDVideoCodecLibMpeg2.h"
+#if defined(HAS_MARVELL_DOVE)
+#include "Video/DVDVideoCodecVMETA.h"
+#endif
 #if defined(HAS_IMXVPU)
 #include "Video/DVDVideoCodecIMX.h"
 #endif
@@ -199,6 +202,11 @@ CDVDVideoCodec* CDVDFactoryCodec::CreateVideoCodec(CDVDStreamInfo &hint, const C
 #else
   hwSupport += "MMAL:no ";
 #endif
+#if defined(HAS_MARVELL_DOVE)
+  hwSupport += "VMETA:yes ";
+#else
+  hwSupport += "VMETA:no ";
+#endif
   CLog::Log(LOGDEBUG, "CDVDFactoryCodec: compiled in hardware support: %s", hwSupport.c_str());
 
   if (hint.stills && (hint.codec == AV_CODEC_ID_MPEG2VIDEO || hint.codec == AV_CODEC_ID_MPEG1VIDEO))
@@ -223,6 +231,13 @@ CDVDVideoCodec* CDVDFactoryCodec::CreateVideoCodec(CDVDStreamInfo &hint, const C
       default:
         if ( (pCodec = OpenCodec(new CDVDVideoCodecAmlogic(), hint, options)) ) return pCodec;
     }
+  }
+#endif
+
+#if defined(HAS_MARVELL_DOVE)
+  if (!hint.software)
+  {
+    if ( (pCodec = OpenCodec(new CDVDVideoCodecVMETA(), hint, options)) ) return pCodec;
   }
 #endif
 

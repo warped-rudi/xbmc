@@ -103,6 +103,10 @@ struct DVDVideoPicture
       CMMALVideoBuffer *MMALBuffer;
     };
 
+    struct {
+      struct _IppVideoPicture *vmeta;
+    };
+
   };
 
   unsigned int iFlags;
